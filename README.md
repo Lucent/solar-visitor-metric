@@ -6,6 +6,8 @@ Three interstellar objects have crossed the solar system in under a decade: 1I/�
 
 solar-visitor-metric provides that number. It borrows the idea behind assembly theory (an object is evidence of design when chance cannot plausibly build it) and turns every claim about a trajectory into **bits of surprise**: −log₂ of the probability under an explicit, calibrated null model. Ten bits means one in a thousand. Twenty means one in a million.
 
+**[Explore the visitors →](https://lucent.github.io/solar-visitor-metric/)** Each path in 3D among the planets and the stars it could have come from, from a million years ago to a million years ahead, with every score behind it.
+
 ## Findings
 
 **None of the three known visitors shows any trace of a planned path.**
@@ -60,8 +62,9 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && mkdir -p o
 .venv/bin/python run.py > out/report.txt          # chance of 1–3 velocity-changing flybys per perihelion ring
 .venv/bin/python score.py > out/scores.txt        # visit and assist scores of planned paths
 .venv/bin/python route_check.py > out/route.txt   # route score on a synthetic star field
-.venv/bin/python real_visitors.py > out/real.txt  # 1I, 2I, 3I against JPL planets and Gaia DR3
+.venv/bin/python real_visitors.py > out/real.txt  # 1I, 2I, 3I against JPL planets and Gaia DR3, and the site's data
+.venv/bin/python -m http.server -d site           # the explorer, locally
 .venv/bin/python factor3d.py                      # in-plane to 3D factor for one Jupiter flyby
 ```
 
-Figures are written as SVG to `out/`. Architecture, decisions and conventions are in [AGENTS.md](AGENTS.md).
+Figures are written as SVG to `out/`; the explorer in `site/` is published to GitHub Pages on every push that changes it. Architecture, decisions and conventions are in [AGENTS.md](AGENTS.md).

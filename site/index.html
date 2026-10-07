@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solar visitor metric</title>
+  <meta name="description" content="Would a planned path through the solar system give itself away? The three interstellar visitors, scored in bits against calibrated chance.">
+  <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three/examples/jsm/", "astronomy-engine": "https://cdn.jsdelivr.net/npm/astronomy-engine/esm/astronomy.js"}}</script>
+  <script type="module" src="app.js"></script>
+  <style>
+/* The colors the WebGL scene reads are registered, so they compute to rgb() in the resolved scheme. */
+@property --ink2 {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --muted {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --grid {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --s1 {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --s2 {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --s3 {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+@property --sun {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
+:root {
+	color-scheme: light dark;
+	--plane: light-dark(#f9f9f7, #0d0d0d);
+	--surface: light-dark(#fcfcfb, #1a1a19);
+	--ink: light-dark(#0b0b0b, #ffffff);
+	--ink2: light-dark(#52514e, #c3c2b7);
+	--muted: #898781;
+	--grid: light-dark(#e1e0d9, #2c2c2a);
+	--s1: light-dark(#2a78d6, #3987e5);
+	--s2: light-dark(#eb6834, #d95926);
+	--s3: light-dark(#1baf7a, #199e70);
+	--sun: #eda100;
+}
+body {
+	margin: 0;
+	display: grid;
+	grid-template: auto minmax(0, 1fr) auto auto / minmax(0, 1fr) minmax(20rem, 30rem);
+	block-size: 100dvh;
+	font-family: system-ui;
+	background: var(--plane);
+	color: var(--ink);
+}
+header {
+	grid-column: 1 / -1;
+	padding: 1rem 1.5rem 0.5rem;
+}
+h1 {
+	margin: 0;
+	font-size: 1.4rem;
+}
+header p {
+	margin: 0.3rem 0 0;
+	max-inline-size: 70rem;
+	color: var(--ink2);
+}
+a {
+	color: var(--s1);
+}
+#scene {
+	position: relative;
+	background: var(--surface);
+	contain: size;
+}
+#scene > * {
+	position: absolute;
+	inset: 0;
+}
+#scene canvas {
+	inline-size: 100%;
+	block-size: 100%;
+}
+.label {
+	margin-inline-start: 0.6rem;
+	pointer-events: none;
+	font-size: 0.75rem;
+	color: var(--ink2);
+	white-space: nowrap;
+}
+.label.shell {
+	color: var(--muted);
+}
+.label.from {
+	color: var(--s2);
+}
+.label.to {
+	color: var(--s3);
+}
+.label.visitor {
+	color: var(--s1);
+	font-weight: 600;
+}
+#tip {
+	inset: 0 auto auto 0;
+	z-index: 1;
+	translate: calc(var(--x) * 1px + 12px) calc(var(--y) * 1px + 12px);
+	padding: 0.3rem 0.5rem;
+	background: var(--plane);
+	border: 1px solid var(--grid);
+	font-size: 0.8rem;
+	pointer-events: none;
+}
+#tip:empty {
+	display: none;
+}
+form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 1rem;
+	padding: 0.6rem 1.5rem;
+}
+input[type=range] {
+	flex: 1 1 12rem;
+}
+output {
+	min-inline-size: 11rem;
+	font-variant-numeric: tabular-nums;
+}
+aside {
+	grid-row: 2 / -1;
+	grid-column: 2;
+	display: flex;
+	flex-wrap: wrap;
+	align-content: start;
+	gap: 0.4rem;
+	padding: 0 1.5rem 1.5rem;
+	overflow: auto;
+}
+[name=visitor] {
+	position: absolute;
+	opacity: 0;
+}
+[name=visitor] + label {
+	padding: 0.3rem 0.7rem;
+	border: 1px solid var(--grid);
+	border-radius: 1rem;
+	cursor: pointer;
+}
+[name=visitor]:checked + label {
+	border-color: var(--s1);
+	color: var(--s1);
+}
+[name=visitor]:focus-visible + label {
+	outline: 2px solid var(--s1);
+}
+article {
+	order: 1;
+	flex-basis: 100%;
+}
+[name=visitor]:not(:checked) + label + article {
+	display: none;
+}
+h2 {
+	margin: 0.8rem 0 0;
+	font-size: 1.05rem;
+	display: flex;
+	justify-content: space-between;
+}
+h2 data {
+	font-variant-numeric: tabular-nums;
+}
+article p {
+	margin: 0.3rem 0;
+	color: var(--ink2);
+}
+button[value] {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--s1);
+	font: inherit;
+	text-decoration: underline dotted;
+	cursor: pointer;
+}
+table {
+	inline-size: 100%;
+	border-collapse: collapse;
+	font-size: 0.9rem;
+	font-variant-numeric: tabular-nums;
+}
+th {
+	text-align: start;
+	font-weight: normal;
+}
+td, th {
+	padding: 0.15rem 0.4rem 0.15rem 0;
+}
+/* Every score is bits; one bar per row, ten bits to full width. */
+[style*="--bits"] > :last-child::after {
+	content: "";
+	display: block;
+	block-size: 0.35rem;
+	inline-size: calc(min(var(--bits), 10) * 10%);
+	min-inline-size: 2px;
+	background: var(--s1);
+	border-radius: 0 2px 2px 0;
+}
+ol {
+	margin: 0.3rem 0;
+	padding-inline-start: 1.2rem;
+	font-size: 0.9rem;
+}
+li {
+	margin-block: 0.3rem;
+}
+.from li::marker {
+	color: var(--s2);
+}
+.to li::marker {
+	color: var(--s3);
+}
+footer {
+	grid-column: 1;
+	padding: 0 1.5rem 0.8rem;
+	font-size: 0.85rem;
+	color: var(--muted);
+}
+@media (width < 52rem) {
+	body {
+		grid-template: none;
+		block-size: auto;
+	}
+	#scene {
+		block-size: 70svh;
+	}
+	aside {
+		grid-row: auto;
+		grid-column: auto;
+		overflow: visible;
+	}
+}
+  </style>
+ </head>
+ <body>
+<header>
+<h1>Would a planned path give itself away?</h1>
+<p>Three objects from other stars have crossed the solar system. Each path is scored in bits of surprise against chance: how close it came to the planets, whether they bent it, and whether it came from or is heading to a nearby star. Inside the zoom radius the picture is to scale; beyond it, distances are logarithmic, so the planets and stars a hundred parsecs away share one view. Scroll to zoom, drag to turn, and slide time from a million years ago to a million years ahead.</p>
+</header>
+<section id="scene" aria-label="The selected visitor's path among the planets and nearby stars"><div id="tip"></div></section>
+<form id="controls">
+<button type="button" id="now">Now</button>
+<input type="range" name="u" min="-1" max="1" step="0.0002" aria-label="Time">
+<output name="date"></output>
+<label><input type="checkbox" name="play"> Play</label>
+<label>Zoom <input type="range" name="zoom" min="-2" max="6.5" step="0.01" value="0.3"></label>
+</form>
+<aside></aside>
+<footer>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</footer>
+ </body>
+</html>

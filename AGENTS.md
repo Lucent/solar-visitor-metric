@@ -16,6 +16,7 @@ Quantify how surprising a visitor's path is, as bits against an explicit null, s
 - `nbody.py` — REBOUND checks of the patched conic: single flybys, targeted chains with the removal test, planned multi-flyby paths.
 - `real.py` — the real visitors in 3D: SBDB orbits, Horizons planets, per-planet phase p-values, assist split into direct pull and solar reflex.
 - `svg.py` — plain-SVG figures, light colors inline with a dark-mode stylesheet.
+- `site/` — the GitHub Pages explorer: `index.html` (shell and stylesheet), `app.js` (three.js scene, Astronomy Engine planets, panels), and `data.json`, written by `real_visitors.py`. `.github/workflows/pages.yml` publishes the folder on every push that touches it.
 
 ## Decisions
 
@@ -29,13 +30,15 @@ Quantify how surprising a visitor's path is, as bits against an explicit null, s
 - **A route is one itinerary: origin, Sun, destination.** The arrival end is scored against isotropic arrivals; the departure end given the arrival, where the Sun's turn angle is taken as observed (it is set by the perihelion, and discovery favors close perihelia) and only its orientation about the arrival direction is random. The two p's are then independent by construction and combine exactly. Scoring the ends separately counted a pair of stars on one line through the Sun twice (a corridor; it overstated 3I-speed nulls by 1.3× in the tail); conditioned, a path the Sun barely bends earns nothing for a destination straight ahead.
 - **A hop is where the meeting happens, not where the star is today.** Candidates are the stars a visitor at v∞ could meet within 20 pc of the Sun, ranked by that distance. Stars outrun slow visitors, so most candidates are farther than 20 pc now; a field is complete for visitors faster than 20 km/s when it holds every star within 20 pc × (1 + |w| / 20 km/s) today. Convolution is spent only on stars whose lower bound on p is below their weight, since no other star can set the score.
 - **A bad radial velocity fakes an encounter.** Real proper motion plus a spurious radial speed of hundreds of km/s puts a star's track almost through the Sun. Gaia velocities count only with `rv_expected_sig_to_noise` ≥ 5 (Katz et al. 2023) and a Galactic rest-frame speed under 600 km/s, above the Galaxy's escape speed.
+- **The site draws one law.** Every distance is drawn at asinh(r / r₀): to scale inside the zoom radius, logarithmic beyond, so a planetary flyby and a star 100 pc away share one view, and zoom changes r₀ rather than the camera. The time slider runs the same function. The picture is a pure function of visitor, time and zoom; the radios and ranges are the state, and the panels are built once. The Python owns every number; the page reads `data.json` and only places things (Astronomy Engine supplies planet positions, valid for millennia, so planets hide beyond 3,000 years from now).
 - **N-body is the referee, not the engine.** The patched conic carries the statistics; REBOUND confirms deflections, targeted chains, and asymptotes, and the visitor starts relative to the barycenter because far out it orbits that, not the wobbling Sun.
 
 ## Conventions
 
 - **Tabs**, per `.editorconfig`. Comments explain why. **No hard line breaks in prose** — docstrings, comments, and docs are one line per paragraph or bullet.
 - **No speculative error handling.** Validate only external data at its boundary (SBDB, Horizons, Gaia responses); trust internal invariants.
-- **Generated output is regenerated, never hand-edited.** `out/` belongs to the scripts; `data/` is a fetch cache. Neither is committed.
+- **Generated output is regenerated, never hand-edited.** `out/` belongs to the scripts; `data/` is a fetch cache. Neither is committed. `site/data.json` is the published result and is committed, so Pages serves exactly what the scripts produced.
+- **The site is no-build and framework-free:** an import map to the latest three.js and Astronomy Engine, newest CSS (`light-dark()`, registered colors the WebGL scene reads back), no fallbacks or shims. The user performs all visual inspection; never run a browser or browser automation.
 - **AGENTS.md records decisions and operating instructions, not results; the README presents the findings.** When a number in the README changes, rerun the script that produced it and update the README in the same commit; when a doc and the code disagree, fix the doc.
 - Python packages only in the project `.venv`. Parallel scripts keep their work under `if __name__ == "__main__"` (Python 3.14 starts workers with forkserver).
 - Commits are atomic: one logical change with its tests and doc lines.

@@ -162,6 +162,51 @@ def ecl_to_icrs(v):
 	return np.array([v[0], c * v[1] - s * v[2], s * v[1] + c * v[2]])
 
 
+def icrs_to_ecl(v):
+	"""Rows of ICRS vectors to the ecliptic frame (inverse of ecl_to_icrs)."""
+	c, s = math.cos(OBLIQUITY), math.sin(OBLIQUITY)
+	return np.stack([v[:, 0], c * v[:, 1] + s * v[:, 2], -s * v[:, 1] + c * v[:, 2]], 1)
+
+
+def _two_body(s):
+	"""The visitor about one body holding all the mass at the barycenter."""
+	com = s.com(last=len(HORIZONS_IDS))
+	p = s.particles[-1]
+	two = rebound.Simulation()
+	two.G = s.G
+	two.t = s.t
+	two.add(m=com.m, x=com.x, y=com.y, z=com.z, vx=com.vx, vy=com.vy, vz=com.vz)
+	two.add(x=p.x, y=p.y, z=p.z, vx=p.vx, vy=p.vy, vz=p.vz)
+	return two
+
+
+def path(tag, times, years=12.0):
+	"""Visitor positions (AU, heliocentric ecliptic) at JD `times`.
+
+	N-body among the planets within `years` of perihelion; beyond, the two-body hyperbola about the barycenter, where the planets no longer matter and IAS15 would otherwise step at Mercury's pace for a million years.
+	"""
+	sim, el = build(tag)
+	tp = el["tp"]
+	sim.integrate(tp, exact_finish_time=1)
+	out = np.empty((len(times), 3))
+	for sign in (-1, 1):
+		s = sim.copy()
+		two = None
+		side = np.flatnonzero(sign * (times - tp) >= 0)
+		for k in side[np.argsort(np.abs(times[side] - tp))]:
+			if abs(times[k] - tp) <= years * 365.25:
+				s.integrate(times[k], exact_finish_time=1)
+				out[k] = _helio(s)[0][-1]
+				continue
+			if two is None:
+				s.integrate(tp + sign * years * 365.25, exact_finish_time=1)
+				two = _two_body(s)
+			two.integrate(times[k], exact_finish_time=1)
+			c, p = two.particles
+			out[k] = (p.x - c.x, p.y - c.y, p.z - c.z)
+	return out
+
+
 def _inbound(s):
 	"""Inbound asymptotic velocity (motion at t -> -inf), barycentric."""
 	p = s.particles[-1]
