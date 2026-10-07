@@ -6,7 +6,7 @@ Three interstellar objects have crossed the solar system in under a decade: 1I/�
 
 solar-visitor-metric provides that number. It borrows the idea behind assembly theory (an object is evidence of design when chance cannot plausibly build it) and turns every claim about a trajectory into **bits of surprise**: −log₂ of the probability under an explicit, calibrated null model. Ten bits means one in a thousand. Twenty means one in a million.
 
-**[Explore the visitors →](https://lucent.github.io/solar-visitor-metric/)** Each path in 3D among the planets and the stars it could have come from, from a million years ago to a million years ahead, with every score behind it.
+**[Explore the visitors →](https://hyperbolic.lucent.tools/)** Each path in 3D among the planets and the stars it could have come from, from a million years ago to a million years ahead, with every score behind it.
 
 ## Findings
 
