@@ -128,6 +128,43 @@ def test_route_aim_hits_star():
 	pytest.fail("no reachable star")
 
 
+def test_route_hops_match_aim():
+	"""The hop is where an exactly aimed visitor meets the star; candidates reach well beyond HOP today."""
+	rng = np.random.default_rng(3)
+	field = route.Field.synthetic(rng)
+	v = 26.3
+	L = route.hops(field, v, -1)
+	ok = np.flatnonzero(L <= route.HOP)
+	assert (field.D[ok] > route.HOP).mean() > 0.5
+	n = 0
+	for k in ok[:100]:
+		V, t = route.aim_at(field.pos[k], field.vel[k], v, -1)
+		if V is None:
+			continue
+		n += 1
+		assert v * abs(t) * route.KMS_PC_MYR == pytest.approx(L[k], rel=1e-9)
+		assert np.linalg.norm(field.pos[k] + (field.vel[k] - V) * t * route.KMS_PC_MYR) < 1e-6
+	assert n > 50
+
+
+def test_route_turn_score_matches_brute_force():
+	"""The departure p is the Rice-convolved fraction of the turn circle passing the star this closely."""
+	from scipy.stats import rice
+	rng = np.random.default_rng(4)
+	field = route.Field.synthetic(rng)
+	err = route.Errors()
+	V_in = 26.3 * route.random_unit(rng)
+	V_out = route.sun_turn(V_in, 0.5, 1.0)
+	_, _, info = route.turn_score(field, V_in, V_out, err, rng)
+	turn = route.turn_circle(V_in, V_out)
+	xs = np.linspace(0, 2 * math.pi, 100000, endpoint=False)
+	cand = np.flatnonzero(info["weights"])
+	for j in cand[np.argsort(info["p"][cand] / info["weights"][cand])[:3]]:
+		r, _ = route.miss(field.pos[j], field.vel[j], turn(xs), +1)
+		s = info["sigma"][j]
+		assert info["p"][j] == pytest.approx(rice.cdf(info["d"][j] / s, r / s).mean(), rel=0.02)
+
+
 def test_targeted_chain_and_removal():
 	"""A Jupiter -> Saturn chain flies as planned; without Jupiter it breaks."""
 	import run

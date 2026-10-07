@@ -10,13 +10,18 @@ Null hypothesis: the visitor's direction is isotropic and unrelated to the stars
 
 for small g (the cone's cross-section projected onto the sphere, over its area); `p_values` evaluates the exact finite-cone fraction numerically.
 
-Look-elsewhere uses a weighted Bonferroni over stars with weights falling as 1/rank by distance among stars reachable at v_inf, encoding a planner's preference for short hops: score = min_k p_k / w_k, so the nearest reachable stars are cheap to "try".
+Candidates are the stars a visitor at v_inf could meet within HOP of the Sun: the hop is where the meeting happens, not where the star is today, so a star 60 pc away now that crossed 10 pc from the Sun when the visitor passed is a short hop. A field is complete for visitors at least as fast as its v_floor: a star met at hop L after time L / v_inf is now at most L (1 + |w| / v_inf) away, so it is enough to hold every star within HOP (1 + |w| / v_floor) of the Sun today.
+
+Look-elsewhere uses a weighted Bonferroni over the candidates with weights falling as 1/rank by hop, encoding a planner's preference for short hops: score = min_k p_k / w_k, so the nearest reachable stars are cheap to "try".
+
+The route is scored as one itinerary, origin, Sun, destination: the arrival end against an isotropic null (`end_score`), the departure end given the arrival (`turn_score`), where the only freedom left is how the Sun's turn is oriented. The two p's are then independent by construction and combine exactly; scored separately, a pair of stars on one line through the Sun would count twice.
 """
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
+from scipy.special import ndtr
 from scipy.stats import rice
 
 from .constants import V_UNIT_KMS
@@ -24,6 +29,23 @@ from .constants import V_UNIT_KMS
 KMS_PC_MYR = 1.0227  # 1 km/s in pc/Myr
 SCREEN = 0.2         # exact p only for stars passed within this fraction of D
 N_NOISE = 24         # grid points over the true miss for the noise convolution
+N_TURN = 128         # orientations of the Sun's turn on the coarse circle
+N_FINE = 128         # points across one star's window on the circle
+HOP = 20.0           # pc from the Sun: the longest hop counted at either end
+V_FLOOR = 20.0       # km/s: fields are complete for visitors at least this fast
+R_MAX = 200.0        # pc: completeness cap, missing only stars faster than 180 km/s
+TOL = 0.5            # pc: stars a visitor can pass this close count as reachable
+RV_SNR = 5.0         # Gaia DR3 radial velocities need rv_expected_sig_to_noise >= this
+V_ESC = 600.0        # km/s in the Galactic rest frame: faster stars are unbound, i.e. mismeasured
+ICRS_TO_GAL = np.array([[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132],
+						[0.4941094278755837, -0.4448296299600112, 0.7469822444972189],
+						[-0.8676661490190047, -0.1980763734312015, 0.4559837761750669]])
+V_SUN_GAL = np.array([11.1, 245.6, 7.25])  # the Sun's velocity about the Galactic center, km/s
+
+
+def reach_radius(w):
+	"""Present distance within which a field must hold stars of speed w (km/s)."""
+	return np.minimum(HOP * (1 + w / V_FLOOR) + TOL, R_MAX)
 
 
 @dataclass
@@ -40,6 +62,11 @@ class Errors:
 		return np.sqrt((tt * self.star_v) ** 2 + (tt * self.visitor_v) ** 2
 					   + (D * self.visitor_dir) ** 2 + sd ** 2)
 
+	def take(self, idx):
+		"""Errors of a subset of stars (per-star arrays indexed, scalars kept)."""
+		return Errors(*(x[idx] if np.ndim(x) else x
+						for x in (getattr(self, f.name) for f in fields(self))))
+
 
 @dataclass
 class Field:
@@ -48,18 +75,25 @@ class Field:
 	D: np.ndarray
 	ids: np.ndarray = None
 
-	@classmethod
-	def from_gaia(cls, path, radius_pc=20.0):
-		"""Gaia DR3 stars with radial velocities, ICRS barycentric frame.
+	def take(self, idx):
+		return Field(self.pos[idx], self.vel[idx], self.D[idx],
+					 None if self.ids is None else self.ids[idx])
 
-		Downloads the table from the Gaia archive if `path` is missing. Returns (field, errors, n_without_rv). Per-star errors: velocity error per axis from parallax, proper-motion and RV errors.
+	@classmethod
+	def from_gaia(cls, path):
+		"""Gaia DR3 stars with radial velocities that could meet a visitor within HOP, ICRS barycentric frame.
+
+		Downloads the table from the Gaia archive if `path` is missing. Returns (field, errors, n_without_rv), the last counting stars within HOP today that lack a usable radial velocity and so cannot be traced. Per-star errors: velocity error per axis from parallax, proper-motion and RV errors.
+
+		Usable means rv_expected_sig_to_noise >= RV_SNR and a space velocity the Galaxy can hold. Low-S/N spectra leave spurious velocities of hundreds of km/s in DR3 (Katz et al. 2023, Sect. 9, who recommend the S/N cut for high-velocity work), and this selection is dominated by fast stars, since they can arrive from farther away. A spurious radial velocity is worse than noise here: real proper motion plus a huge radial speed makes a star's track run almost through the Sun, a fake close encounter. Stars faster than V_ESC about the Galactic center (escape is ~530 km/s, Deason et al. 2019) are such errors.
 		"""
 		import csv
 		if not os.path.exists(path):
-			fetch_gaia(path, radius_pc)
+			fetch_gaia(path)
 		rows = list(csv.DictReader(open(path)))
-		n_all = len(rows)
-		rows = [r for r in rows if r["radial_velocity"]]
+		within = lambda rows: sum(float(r["parallax"]) > 1000.0 / HOP for r in rows)
+		n_all = within(rows)
+		rows = [r for r in rows if r["radial_velocity"] and float(r["rv_expected_sig_to_noise"]) >= RV_SNR]
 		f = lambda k: np.array([float(r[k]) for r in rows])
 		ra, dec, plx = np.radians(f("ra")), np.radians(f("dec")), f("parallax")
 		D = 1000.0 / plx
@@ -73,36 +107,46 @@ class Field:
 		s_ra = k * np.hypot(f("pmra_error") / plx, f("pmra") * s_plx / plx ** 2)
 		s_dec = k * np.hypot(f("pmdec_error") / plx, f("pmdec") * s_plx / plx ** 2)
 		s_v = np.sqrt((s_ra ** 2 + s_dec ** 2 + f("radial_velocity_error") ** 2) / 3)
-		field = cls(D[:, None] * rhat, vel, D, np.array([r["source_id"] for r in rows]))
-		errors = Errors(star_v=s_v, parallax_mas=s_plx)
-		return field, errors, n_all - len(rows)
+		bound = np.flatnonzero(np.linalg.norm(vel @ ICRS_TO_GAL.T + V_SUN_GAL, axis=1) < V_ESC)
+		field = cls(D[:, None] * rhat, vel, D, np.array([r["source_id"] for r in rows])).take(bound)
+		errors = Errors(star_v=s_v, parallax_mas=s_plx).take(bound)
+		return field, errors, n_all - (field.D < HOP).sum()
 
 	@classmethod
-	def synthetic(cls, rng, density=0.08, radius=20.0,
+	def synthetic(cls, rng, density=0.08,
 				  v_mean=(-11.1, -12.2, -7.3), v_sigma=(35.0, 25.0, 18.0)):
-		"""Uniform stars, Gaussian velocities relative to the Sun.
+		"""Uniform stars, Gaussian velocities relative to the Sun, complete for visitors faster than V_FLOOR.
 
-		Defaults: ~0.08 systems/pc^3 (the 10 pc census) and the local disk velocity ellipsoid, offset by the Sun's peculiar motion.
+		Defaults: ~0.08 systems/pc^3 (the 10 pc census) and the local disk velocity ellipsoid, offset by the Sun's peculiar motion. A Poisson field out to R_MAX thinned to each star's reach_radius: draw velocities for the full ball, keep a star with the chance its radius falls inside its reach.
 		"""
-		n = rng.poisson(density * 4 / 3 * math.pi * radius ** 3)
-		r = radius * rng.random(n) ** (1 / 3)
-		d = rng.normal(size=(n, 3))
-		pos = d / np.linalg.norm(d, axis=1)[:, None] * r[:, None]
+		n = rng.poisson(density * 4 / 3 * math.pi * R_MAX ** 3)
 		vel = rng.normal(v_mean, v_sigma, size=(n, 3))
-		return cls(pos, vel, np.linalg.norm(pos, axis=1))
+		reach = reach_radius(np.linalg.norm(vel, axis=1))
+		keep = rng.random(n) < (reach / R_MAX) ** 3
+		vel, reach = vel[keep], reach[keep]
+		r = reach * rng.random(len(vel)) ** (1 / 3)
+		d = rng.normal(size=(len(vel), 3))
+		pos = d / np.linalg.norm(d, axis=1)[:, None] * r[:, None]
+		return cls(pos, vel, r)
 
 
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
 
 
-def fetch_gaia(path, radius_pc=20.0):
-	"""Gaia DR3 sources within radius_pc with parallax S/N > 10, as CSV."""
+def fetch_gaia(path):
+	"""Gaia DR3 sources with parallax S/N > 10 that are within reach_radius of their speed, plus all within HOP (to count those without radial velocity), as CSV."""
 	from urllib.parse import urlencode
 	from urllib.request import urlopen
+	k = 4.740470446
+	w = (f"SQRT(POWER({k}*pmra/parallax, 2) + POWER({k}*pmdec/parallax, 2) "
+		 "+ POWER(radial_velocity, 2))")
 	query = ("SELECT source_id, ra, dec, parallax, parallax_error, pmra, pmra_error, "
-			 "pmdec, pmdec_error, radial_velocity, radial_velocity_error, phot_g_mean_mag "
-			 f"FROM gaiadr3.gaia_source WHERE parallax > {1000.0 / radius_pc} "
-			 "AND parallax_over_error > 10")
+			 "pmdec, pmdec_error, radial_velocity, radial_velocity_error, rv_expected_sig_to_noise, "
+			 "phot_g_mean_mag "
+			 f"FROM gaiadr3.gaia_source WHERE parallax > {1000.0 / R_MAX} "
+			 f"AND parallax_over_error > 10 AND (parallax > {1000.0 / HOP} OR "
+			 f"(radial_velocity IS NOT NULL AND "
+			 f"1000/parallax < {HOP} * (1 + {w} / {V_FLOOR}) + {TOL}))")
 	data = urlencode({"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv",
 					  "QUERY": query}).encode()
 	with urlopen(GAIA_TAP, data=data, timeout=600) as r:
@@ -114,35 +158,79 @@ def fetch_gaia(path, radius_pc=20.0):
 		f.write(body)
 
 
-def end_weights(field, v_inf, sign, tol=0.5):
-	"""Look-elsewhere weights for one end: 1/rank by distance, reachable only.
+def hops(field, v_inf, sign):
+	"""Shortest hop (pc from the Sun at the meeting) at which a visitor at v_inf meets each star; inf where it cannot pass within TOL.
 
-	A star can be met at speed v_inf only if some direction puts the relative velocity u = w - V along +-s_hat. Directions to the sphere of possible u (center w, radius v_inf) form a cone about w_hat of half-angle asin(v_inf/|w|) (all directions if |w| <= v_inf), so the smallest achievable miss is D sin(max(0, angle(axis, w) - half-angle)). Stars that cannot be approached within `tol` pc get no weight. This depends only on v_inf, never on the visitor's direction, so the test stays valid while the budget is not wasted on impossible stars.
+	A star can be met at speed v_inf only if some direction puts the relative velocity u = w - V along +-s_hat. Directions to the sphere of possible u (center w, radius v_inf) form a cone about w_hat of half-angle asin(v_inf/|w|) (all directions if |w| <= v_inf), so the smallest achievable miss is D sin(max(0, angle(axis, w) - half-angle)). An exact meeting at time t has |s + w t| = v_inf |t|, a quadratic in x = 1/t (as in aim_at); the hop is v_inf |t| for the earliest root on this side of t = 0, or at the grazing time -B / 2A for stars only reachable within TOL. All of this depends on v_inf alone, never on the visitor's direction.
 	"""
 	axis = field.pos / field.D[:, None] * (-sign)
 	wn = np.linalg.norm(field.vel, axis=1)
-	cosang = np.einsum("ij,ij->i", axis, field.vel) / wn
-	ang = np.arccos(np.clip(cosang, -1, 1))
+	sw = np.einsum("ij,ij->i", field.pos, field.vel)
+	ang = np.arccos(np.clip(-sign * sw / (field.D * wn), -1, 1))
 	half = np.arcsin(np.minimum(1.0, v_inf / wn))
 	gmin = np.where(wn <= v_inf, 0.0, np.maximum(0.0, ang - half))
-	ok = field.D * np.sin(np.minimum(gmin, 0.5 * math.pi)) < tol
-	rank = np.empty(len(field.D))
-	order = np.argsort(np.where(ok, field.D, np.inf))
-	rank[order] = np.arange(1, len(order) + 1)
+	ok = field.D * np.sin(np.minimum(gmin, 0.5 * math.pi)) < TOL
+	A, B, C = field.D ** 2 / KMS_PC_MYR ** 2, 2 * sw / KMS_PC_MYR, wn ** 2 - v_inf ** 2
+	disc = B * B - 4 * A * C
+	sq = np.sqrt(np.maximum(disc, 0.0))
+	x = np.stack([(-B + sq) / (2 * A), (-B - sq) / (2 * A)])
+	x = np.where(sign * x > 0, np.abs(x), 0.0).max(axis=0)   # earliest meeting: largest |1/t|
+	graze = np.where(sign * B < 0, np.abs(B) / (2 * A), 0.0)
+	x = np.where(disc >= 0, x, graze)
+	with np.errstate(divide="ignore"):
+		return np.where(ok & (x > 0), v_inf * KMS_PC_MYR / x, np.inf)
+
+
+def end_weights(field, v_inf, sign):
+	"""Look-elsewhere weights for one end: 1/rank by hop among stars met within HOP.
+
+	Depends only on v_inf, so the test stays valid while the budget is not wasted on impossible stars; the field must be complete at this speed.
+	"""
+	assert v_inf >= V_FLOOR, f"field is complete only for v_inf >= {V_FLOOR} km/s"
+	L = hops(field, v_inf, sign)
+	ok = L <= HOP
+	rank = np.empty(len(L))
+	rank[np.argsort(L)] = np.arange(1, len(L) + 1)
 	w = np.where(ok, 1 / rank, 0.0)
 	return w / w.sum()
 
 
-def encounters(field, V, sign):
-	"""Miss distance and time for every star; sign -1 inbound, +1 outbound.
+def miss(pos, vel, V, sign):
+	"""Miss distance and time of stars (pos, vel) against visitor velocities V, broadcast over leading axes; sign -1 inbound, +1 outbound.
 
 	Stars whose closest approach falls on the wrong side of t = 0 get the t = 0 separation (the visitor never came nearer).
 	"""
-	u = field.vel - V
-	t = -np.einsum("ij,ij->i", field.pos, u) / (KMS_PC_MYR * np.einsum("ij,ij->i", u, u))
+	u = vel - V
+	t = -np.sum(pos * u, axis=-1) / (KMS_PC_MYR * np.sum(u * u, axis=-1))
 	t = np.where(sign * t > 0, t, 0.0)
-	r = field.pos + u * (t * KMS_PC_MYR)[:, None]
-	return np.linalg.norm(r, axis=1), t
+	return np.linalg.norm(pos + u * (t * KMS_PC_MYR)[..., None], axis=-1), t
+
+
+def rice_cdf(x, b):
+	"""P(|b + unit 2D Gaussian| <= x), elementwise. SciPy's series slows without bound as b grows; beyond b = 100 the Gaussian limit about sqrt(b^2 + 1/2) is within 1.3% of it."""
+	x, b = np.broadcast_arrays(x, b)
+	far = b > 100
+	out = np.empty(b.shape)
+	out[~far] = rice.cdf(x[~far], b[~far])
+	out[far] = ndtr(x[far] - np.sqrt(b[far] ** 2 + 0.5))
+	return out
+
+
+def encounters(field, V, sign):
+	return miss(field.pos, field.vel, V, sign)
+
+
+def observe(d, sig, rng):
+	"""A measured miss: the transverse miss is a 2D vector, so add 2D Gaussian error."""
+	return np.hypot(d + rng.normal(size=d.shape) * sig, rng.normal(size=d.shape) * sig)
+
+
+def best(p, weights, info):
+	"""Weighted Bonferroni over stars: (p_end, star index, info)."""
+	with np.errstate(divide="ignore"):
+		ratio = np.where(weights > 0, p / weights, np.inf)
+	k = int(np.argmin(ratio))
+	return min(1.0, float(ratio[k])), k, {**info, "p": p, "weights": weights}
 
 
 def p_values(field, v_inf, d_eff, sign, n_grid=160):
@@ -187,27 +275,89 @@ def end_score(field, V, sign, errors, rng=None, weights=None):
 	d, t = encounters(field, V, sign)
 	sig = errors.miss_sigma(field.D, t)
 	if rng is not None:
-		# the transverse miss is a 2D vector; add 2D Gaussian error
-		d = np.hypot(d + rng.normal(size=d.shape) * sig, rng.normal(size=d.shape) * sig)
+		d = observe(d, sig, rng)
 	# Only stars passed within a fraction of their distance can be rare; others (including stars never approached, d = D) get p = 1, which is exact for d >= D and conservative otherwise.
 	p = np.ones_like(d)
-	near = np.flatnonzero(d + 2 * sig < SCREEN * field.D)
+	if weights is None:
+		weights = end_weights(field, v_inf, sign)
+	near = np.flatnonzero((d + 2 * sig < SCREEN * field.D) & (weights > 0))
+	# A star sets the score only if p / w < 1. The kernel is at least P(|noise| <= 3 sigma) = 0.989 out to d - 3 sigma, so p >= 0.989 p_geom(d - 3 sigma): convolve only stars whose bound (with slack for the quadrature) is below their weight.
+	lo = p_values(field.take(near), v_inf, np.maximum(d[near] - 3 * sig[near], 0.0), sign)
+	near = near[0.9 * lo < weights[near]]
 	if len(near):
 		dn, sn = d[near], sig[near]
 		r = np.linspace(0, 1, N_NOISE + 1) * (dn + 8 * sn)[:, None]   # true miss grid
 		rows = np.repeat(near, N_NOISE + 1)
-		sub = Field(field.pos[rows], field.vel[rows], field.D[rows])
-		pg = p_values(sub, v_inf, r.ravel(), sign).reshape(len(near), N_NOISE + 1)
+		pg = p_values(field.take(rows), v_inf, r.ravel(), sign).reshape(len(near), N_NOISE + 1)
 		rm = 0.5 * (r[:, 1:] + r[:, :-1])
-		kern = rice.cdf(dn[:, None] / sn[:, None], rm / sn[:, None])
+		kern = rice_cdf(dn[:, None] / sn[:, None], rm / sn[:, None])
 		p[near] = np.sum(np.diff(pg, axis=1) * kern, axis=1)
+	return best(p, weights, {"d": d, "sigma": sig, "t": t})
+
+
+def turn_circle(V_in, V_out):
+	"""Departures the Sun allows an arrival V_in: the circle at V_out's angle from it, as a function of the turn's orientation x (x = 0 is V_out)."""
+	v = np.linalg.norm(V_out)
+	a = V_in / np.linalg.norm(V_in)
+	c = a @ V_out / v
+	n1 = V_out / v - c * a
+	s = np.linalg.norm(n1)
+	n1 /= s
+	n2 = np.cross(a, n1)
+	return lambda x: v * (c * a + s * (np.cos(x)[..., None] * n1 + np.sin(x)[..., None] * n2))
+
+
+def turn_score(field, V_in, V_out, errors, rng=None, weights=None):
+	"""Score the departure end given the arrival. Returns (p_end, best star index, info) like end_score.
+
+	The Sun turns an arrival through an angle set by the perihelion distance, and discovery, not design, favors close perihelia; so the angle is taken as observed, and the null spins the turn uniformly about the arrival direction. The departure is then a point on a circle of directions, and p_j is the fraction of that circle on which star j would be passed at least as closely as observed, convolved with the Rice distribution of the measured miss as in end_score. A star's closeness on the circle is integrated finely across a window about its closest orientation (from the local curvature where the window is narrower than a coarse step), and coarsely everywhere else, so a second close stretch is never dropped. A path the Sun barely turns has a circle that passes a star straight ahead all the way round: p = 1, and a destination collinear with the origin earns nothing.
+	"""
+	v_inf = float(np.linalg.norm(V_out))
 	if weights is None:
-		weights = end_weights(field, v_inf, sign)
-	with np.errstate(divide="ignore"):
-		ratio = np.where(weights > 0, p / weights, np.inf)
-	k = int(np.argmin(ratio))
-	return min(1.0, float(ratio[k])), k, {"d": d, "sigma": sig, "t": t, "p": p,
-										  "weights": weights}
+		weights = end_weights(field, v_inf, +1)
+	turn = turn_circle(V_in, V_out)
+	d, t = encounters(field, V_out, +1)
+	sig = errors.miss_sigma(field.D, t)
+	if rng is not None:
+		d = observe(d, sig, rng)
+	p = np.ones_like(d)
+	step = 2 * math.pi / N_TURN
+	x = np.arange(N_TURN) * step
+	j = np.flatnonzero(weights > 0)
+	r = miss(field.pos[j, None], field.vel[j, None], turn(x), +1)[0]
+	# A star sets the score only if p / w < 1, so bound p from below and drop the rest; dropping sets p to 1, so a loose bound costs power, never validity. Two bounds: where the circle passes within d - 3 sigma the kernel is at least 0.989 (count those coarse points, less one step at every edge of a stretch); and nowhere is the kernel below its value at the circle's farthest pass (padded by the largest change between neighboring points).
+	inside = r < (d[j] - 3 * sig[j])[:, None]
+	edges = (inside != np.roll(inside, 1, axis=1)).sum(axis=1)
+	far = r.max(axis=1) + np.abs(np.diff(r, axis=1)).max(axis=1)
+	lower = np.maximum(0.989 * np.maximum(inside.sum(axis=1) - edges, 0) * step / (2 * math.pi), rice_cdf(d[j] / sig[j], far / sig[j]))
+	keep = lower < weights[j]
+	j, r = j[keep], r[keep]
+	pos, vel, dj, sj = field.pos[j], field.vel[j], d[j], sig[j]
+	cut = (dj + 8 * sj)[:, None]   # beyond this true miss the Rice kernel is negligible
+
+	def kernel(r):
+		"""Rice CDF at the observed miss for true misses r, one row per star."""
+		out = np.zeros_like(r)
+		m = r < cut
+		out[m] = rice_cdf(np.broadcast_to((dj / sj)[:, None], r.shape)[m], (r / sj[:, None])[m])
+		return out
+
+	x0 = x[np.argmin(r, axis=1)]
+	f = lambda x: miss(pos, vel, turn(x), +1)[0] ** 2
+	h = 1e-5
+	for _ in range(8):
+		fm, f0, fp = f(x0 - h), f(x0), f(x0 + h)
+		curv = fm - 2 * f0 + fp
+		x0 -= np.where(curv > 0, np.clip(h * (fp - fm) / (2 * np.where(curv > 0, curv, 1.0)), -step, step), 0.0)
+	fm, f0, fp = f(x0 - h), f(x0), f(x0 + h)
+	c = np.maximum((fm - 2 * f0 + fp) / (2 * h * h), 1e-300)
+	narrow = 1.5 * np.sqrt(np.maximum(cut[:, 0] ** 2 - f0, 0.0) / c)
+	W = np.minimum(math.pi, np.where(narrow < step, narrow, ((r < cut).sum(axis=1) + 1) * step))
+	xs = x0[:, None] + W[:, None] * np.linspace(-1, 1, N_FINE)
+	fine = kernel(miss(pos[:, None], vel[:, None], turn(xs), +1)[0])
+	outside = np.abs((x - x0[:, None] + math.pi) % (2 * math.pi) - math.pi) > W[:, None]
+	p[j] = np.minimum(1.0, (np.trapezoid(fine, xs, axis=1) + step * (kernel(r) * outside).sum(axis=1)) / (2 * math.pi))
+	return best(p, weights, {"d": d, "sigma": sig, "t": t})
 
 
 def combine(p1, p2):
@@ -246,15 +396,21 @@ def null_route(field, v_inf, n, errors, seed=0, q_max=30.0):
 	rng = np.random.default_rng(seed)
 	g = 2 / (v_inf / V_UNIT_KMS) ** 2        # b^2 = q^2 + g q (AU)
 	b2max = q_max ** 2 + g * q_max
-	w_in, w_out = end_weights(field, v_inf, -1), end_weights(field, v_inf, +1)
+	# only weighted stars can set the score, so each end works on its candidates alone
+	ends = []
+	for sign in (-1, +1):
+		w = end_weights(field, v_inf, sign)
+		idx = np.flatnonzero(w)
+		ends.append((field.take(idx), errors.take(idx), w[idx]))
+	(f_in, e_in, w_in), (f_out, e_out, w_out) = ends
 	out = np.empty((n, 3))
 	for k in range(n):
 		V_in = v_inf * random_unit(rng)
 		b2 = b2max * rng.random()
 		q = 0.5 * (-g + math.sqrt(g * g + 4 * b2))
 		V_out = sun_turn(V_in, q, rng.uniform(0, 2 * math.pi))
-		p_in, _, _ = end_score(field, V_in, -1, errors, rng, weights=w_in)
-		p_out, _, _ = end_score(field, V_out, +1, errors, rng, weights=w_out)
+		p_in, _, _ = end_score(f_in, V_in, -1, e_in, rng, weights=w_in)
+		p_out, _, _ = turn_score(f_out, V_in, V_out, e_out, rng, weights=w_out)
 		out[k] = (p_in, p_out, combine(p_in, p_out))
 	return out
 
@@ -271,7 +427,7 @@ def aim_at(star_pos, star_vel, v_inf, sign):
 	if disc < 0:
 		return None, None
 	for x in sorted(((-B + math.sqrt(disc)) / (2 * A), (-B - math.sqrt(disc)) / (2 * A)),
-					key=abs):
+					key=lambda x: -abs(x)):   # earliest meeting, the shorter hop
 		if x != 0 and sign * x > 0:
 			t = 1 / x
 			return w + s / (t * KMS_PC_MYR), t

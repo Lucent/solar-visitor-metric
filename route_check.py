@@ -18,8 +18,8 @@ N_NOISE_DRAWS = 31
 
 
 def reachable(field, ranks, v, sign, exclude=()):
-	"""First star at or after each distance rank that v_inf can meet."""
-	srt = np.argsort(field.D)
+	"""First star at or after each hop rank that v_inf can meet exactly."""
+	srt = np.argsort(route.hops(field, v, sign))
 	out = []
 	for r in ranks:
 		for kk in range(r - 1, len(srt)):
@@ -38,7 +38,7 @@ def score_route(field, V_in, V_out, errors, seed=0):
 	rows = []
 	for _ in range(N_NOISE_DRAWS):
 		p_in, k_in, _ = route.end_score(field, V_in, -1, errors, rng)
-		p_out, k_out, _ = route.end_score(field, V_out, +1, errors, rng)
+		p_out, k_out, _ = route.turn_score(field, V_in, V_out, errors, rng)
 		rows.append((p_in, p_out, route.combine(p_in, p_out), k_in, k_out))
 	rows = np.array(rows)
 	bits = -np.log2(np.maximum(rows[:, :3], 1e-300))
@@ -59,8 +59,9 @@ def main():
 	rng = np.random.default_rng(1)
 	field = route.Field.synthetic(rng)
 	err = route.Errors()
-	print(f"Synthetic field: {len(field.D)} stars within 20 pc "
-		  f"({(field.D < 10).sum()} within 10 pc); errors: star v {err.star_v} km/s, "
+	print(f"Synthetic field: {len(field.D)} stars that could meet a visitor faster than "
+		  f"{route.V_FLOOR:g} km/s within {route.HOP:g} pc of the Sun ({(field.D < route.HOP).sum()} "
+		  f"within {route.HOP:g} pc today); errors: star v {err.star_v} km/s, "
 		  f"parallax {err.parallax_mas} mas, visitor direction {err.visitor_dir:g} rad\n")
 
 	bits = np.arange(0, 14.5, 0.5)
@@ -93,6 +94,11 @@ def main():
 	map_done = False
 	for name, v in VISITORS.items():
 		first = reachable(field, (1,), v, -1)
+		for sign, lab in ((-1, "from"), (+1, "to")):
+			L = route.hops(field, v, sign)
+			ok = L <= route.HOP
+			print(f"  {name} {lab}: {ok.sum()} candidate stars, {(ok & (field.D > route.HOP)).sum()} "
+				  f"of them beyond {route.HOP:g} pc today (farthest {field.D[ok].max():.0f} pc)")
 		cases = {
 			"near -> near": first + reachable(field, (2,), v, +1, {first[0][0]}),
 			"near -> mid (rank ~100)": first + reachable(field, (100,), v, +1),
@@ -120,9 +126,9 @@ def main():
 							   (pair[1][0], t_out, f"destination (rank {pair[1][1]})")],
 							  f"Planted route at {v:g} km/s",
 							  [f"{name}-speed visitor, perihelion {q:.2f} AU",
-							   f"from: {b[0]:.1f} bits, {field.D[pair[0][0]]:.2f} pc away, "
+							   f"from: {b[0]:.1f} bits, {field.D[pair[0][0]]:.2f} pc away now, "
 							   f"met {abs(t_in):.2f} Myr ago",
-							   f"to: {b[1]:.1f} bits, {field.D[pair[1][0]]:.2f} pc away, "
+							   f"to: {b[1]:.1f} bits, {field.D[pair[1][0]]:.2f} pc away now, "
 							   f"reached in {t_out:.2f} Myr",
 							   f"combined: {b[2]:.1f} bits"])
 				map_done = True

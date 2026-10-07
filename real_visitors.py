@@ -26,9 +26,11 @@ def date(jd):
 
 
 def main():
-	field, errors, n_no_rv = route.Field.from_gaia("data/gaia_20pc.csv")
-	print(f"Gaia DR3 within 20 pc: {len(field.D)} stars with radial velocities "
-		  f"({n_no_rv} without, excluded); median velocity error "
+	field, errors, n_no_rv = route.Field.from_gaia("data/gaia_reach.csv")
+	print(f"Gaia DR3: {len(field.D)} stars with radial velocities that could meet a visitor faster "
+		  f"than {route.V_FLOOR:g} km/s within {route.HOP:g} pc of the Sun "
+		  f"({(field.D < route.HOP).sum()} within {route.HOP:g} pc today; {n_no_rv} more there lack "
+		  f"a radial velocity and are excluded); median velocity error "
 		  f"{np.median(errors.star_v):.2f} km/s per axis\n")
 	figs = []
 	for tag in (sys.argv[1:] or TAGS):
@@ -43,14 +45,18 @@ def main():
 		print(f"  assist: total {a['total']:.2e} of v_inf; parts (vectors, may cancel): "
 			  f"planets' direct pull {a['direct']:.2e}, Sun's reflex wobble {a['reflex']:.2e}")
 		ends = []
-		for V, sign, lab in ((V_in, -1, "from"), (V_out, +1, "to")):
-			p, k, info = route.end_score(field, V, sign, errors)
+		turn = math.degrees(math.acos(V_in @ V_out / (np.linalg.norm(V_in) * np.linalg.norm(V_out))))
+		print(f"  the Sun turned it through {turn:.1f}°; the departure is scored given the arrival, over orientations of that turn")
+		for V, sign, lab, (p, k, info) in ((V_in, -1, "from", route.end_score(field, V_in, -1, errors)),
+										   (V_out, +1, "to", route.turn_score(field, V_in, V_out, errors))):
 			ends.append(p)
-			j = int(np.argmin(info["d"]))
-			print(f"  route {lab}: {max(0.0, -math.log2(p)):.2f} bits; nearest stellar pass: Gaia DR3 "
-				  f"{field.ids[j]} at {field.D[j]:.1f} pc, miss {info['d'][j]:.2f} ± "
-				  f"{info['sigma'][j]:.2f} pc, {abs(info['t'][j]):.2f} Myr "
-				  f"{'ago' if sign < 0 else 'ahead'}")
+			cand = np.flatnonzero(info["weights"])
+			j = cand[np.argmin(info["d"][cand])]
+			hop = np.linalg.norm(V) * abs(info["t"][j]) * route.KMS_PC_MYR
+			print(f"  route {lab}: {max(0.0, -math.log2(p)):.2f} bits ({len(cand)} candidate stars); "
+				  f"nearest pass: Gaia DR3 {field.ids[j]}, {field.D[j]:.1f} pc away now, missed by "
+				  f"{info['d'][j]:.2f} ± {info['sigma'][j]:.2f} pc {hop:.1f} pc from the Sun, "
+				  f"{abs(info['t'][j]):.2f} Myr {'ago' if sign < 0 else 'ahead'}")
 		rb = max(0.0, -math.log2(route.combine(*ends)))
 		with Pool() as pool:
 			nr = route.null_route_parallel(field, float(np.linalg.norm(V_in)), N_NULL,
@@ -60,7 +66,7 @@ def main():
 			  f"at this speed score at least as high on the Gaia field\n")
 		r["lines"] = [f"v∞ {r['v_inf_kms']:.1f} km/s; visit score {r['visit_bits']:.1f} bits",
 					  f"assist {a['total']:.1e} of v∞ (direct {a['direct']:.1e})",
-					  f"route {rb:.1f} bits (Gaia DR3, 20 pc)"]
+					  f"route {rb:.1f} bits (Gaia DR3, hops ≤ {route.HOP:g} pc)"]
 		figs.append(r)
 	if not sys.argv[1:]:
 		svg.real_figure(f"{OUT}/real_visitors.svg", figs)

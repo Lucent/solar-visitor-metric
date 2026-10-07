@@ -408,7 +408,7 @@ def route_map(path_file, field, V_in, V_out, ends, title, lines, slab=3.0):
 			f'gray: stars within ±{slab:g} pc of it, at their present positions.</text>',
 			f'<clipPath id="rm"><rect x="{cx - R}" y="{cy - R}" width="{2 * R}" height="{2 * R}"/></clipPath>',
 			f'<rect x="{cx - R}" y="{cy - R}" width="{2 * R}" height="{2 * R}" class="grid"/>']
-	inslab = np.abs(field.pos @ e3) < slab
+	inslab = (np.abs(field.pos @ e3) < slab) & (field.D < 1.5 * ext)
 	for p in field.pos[inslab]:
 		x, y = P(p)
 		body.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2" fill="var(--muted)" clip-path="url(#rm)"/>')
