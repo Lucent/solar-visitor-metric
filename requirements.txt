@@ -1,4 +1,4 @@
-poliastro
-astropy
 numpy
-matplotlib
+scipy
+rebound
+pytest
