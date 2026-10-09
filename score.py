@@ -2,6 +2,7 @@
 
 	.venv/bin/python score.py > out/scores.txt
 """
+import json
 import math
 import random
 import sys
@@ -15,6 +16,12 @@ from solar_visitor_metric.constants import PLANETS, VISITORS, kms
 from solar_visitor_metric.flyby import Crossing, local_velocity
 
 OUT = "out"
+FLYBYS = f"{OUT}/flybys.json"   # read by real_visitors.py for the site's missions
+# Each planned flyby by its pass distances, as the site names it.
+NAMES = {"Earth + Mars visits, Jupiter assist": "Earth and Mars at 1.5 million km, then a Jupiter assist",
+			  "Jupiter assist only": "Jupiter assist alone",
+			  "Earth + Mars visits only": "Earth and Mars at 1.5 million km, no assist",
+			  "Close Earth + Mars, Jupiter assist": "Earth and Mars at 150,000 km, then a Jupiter assist"}
 N_NULL = 4_000_000
 N_FILL = 201
 EARTH, MARS, JUPITER = 2, 3, 4
@@ -63,7 +70,7 @@ def main():
 	print(f"Null: {N_NULL:,} paths per speed. Unplanned crossings are random; "
 		  f"scores are medians over {N_FILL} draws.\n")
 	print(f"{'example':<46}{'visit':>7}{'assist':>9}{'a-bits':>8}{'excess':>8}{'total':>8}")
-	panels, marks = [], []
+	panels, marks, flybys = [], [], []
 	for title, v_kms, b, plan in examples():
 		draws = [scores.fly(kms(v_kms), b, plan=plan, rng=random.Random(s))
 				 for s in range(N_FILL)]
@@ -82,8 +89,12 @@ def main():
 		for (i, sg), bp in plan.items():
 			lines.append(f"{PLANETS[i].name}: b_p {bp * 1.495978707e8 / 1e3:,.0f} thousand km")
 		panels.append((title, path, lines))
+		flybys.append({"name": NAMES[title.split(" (")[0]], "speed": v_kms, "bits": ab + xb, "floor": floor})
 		if "26.3" in title and a > 0.005:
 			marks.append((title.split(" (")[0], a))
+
+	with open(FLYBYS, "w") as f:
+		json.dump(flybys, f, ensure_ascii=False, indent="\t")
 
 	# random null paths for contrast
 	rng = random.Random(7)

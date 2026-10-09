@@ -17,42 +17,13 @@ N_NULL = 72_000
 N_NOISE_DRAWS = 31
 
 
-def reachable(field, ranks, v, sign, exclude=()):
-	"""First star at or after each hop rank that v_inf can meet exactly."""
-	srt = np.argsort(route.hops(field, v, sign))
-	out = []
-	for r in ranks:
-		for kk in range(r - 1, len(srt)):
-			if srt[kk] in exclude:
-				continue
-			V, t = route.aim_at(field.pos[srt[kk]], field.vel[srt[kk]], v, sign)
-			if V is not None:
-				out.append((srt[kk], kk + 1))
-				break
-	return out
-
-
-def score_route(field, V_in, V_out, errors, seed=0):
-	"""Median bits over measurement-noise draws: (from, to, combined)."""
-	rng = np.random.default_rng(seed)
-	rows = []
-	for _ in range(N_NOISE_DRAWS):
-		p_in, k_in, _ = route.end_score(field, V_in, -1, errors, rng)
-		p_out, k_out, _ = route.turn_score(field, V_in, V_out, errors, rng)
-		rows.append((p_in, p_out, route.combine(p_in, p_out), k_in, k_out))
-	rows = np.array(rows)
-	bits = -np.log2(np.maximum(rows[:, :3], 1e-300))
-	return np.median(bits, axis=0), rows[:, 3:]
-
-
 def planted(field, v, pair, errors):
 	(i, ri), (j, rj) = pair
 	plan = route.plan_route(field, i, j, v)
 	if plan is None:
 		return None
 	V_in, V_out, q = plan
-	bits, _ = score_route(field, V_in, V_out, errors)
-	return V_in, V_out, q, bits
+	return V_in, V_out, q, route.planted_bits(V_in, V_out, field, errors, N_NOISE_DRAWS)
 
 
 def main():
@@ -93,17 +64,17 @@ def main():
 	print(f"  {'case':<44}{'v':>6}{'from':>7}{'to':>7}{'comb':>7}{'calib':>8}{'q (AU)':>9}")
 	map_done = False
 	for name, v in VISITORS.items():
-		first = reachable(field, (1,), v, -1)
+		first = route.reachable(field, (1,), v, -1)
 		for sign, lab in ((-1, "from"), (+1, "to")):
 			L = route.hops(field, v, sign)
 			ok = L <= route.HOP
 			print(f"  {name} {lab}: {ok.sum()} candidate stars, {(ok & (field.D > route.HOP)).sum()} "
 				  f"of them beyond {route.HOP:g} pc today (farthest {field.D[ok].max():.0f} pc)")
 		cases = {
-			"near -> near": first + reachable(field, (2,), v, +1, {first[0][0]}),
-			"near -> mid (rank ~100)": first + reachable(field, (100,), v, +1),
-			"far -> far (rank ~1000, ~2000)": reachable(field, (1000,), v, -1)
-			+ reachable(field, (2000,), v, +1),
+			"near -> near": first + route.reachable(field, (2,), v, +1, {first[0][0]}),
+			"near -> mid (rank ~100)": first + route.reachable(field, (100,), v, +1),
+			"far -> far (rank ~1000, ~2000)": route.reachable(field, (1000,), v, -1)
+			+ route.reachable(field, (2000,), v, +1),
 		}
 		for case, pair in cases.items():
 			if len(pair) < 2 or pair[0][0] == pair[1][0]:
@@ -135,8 +106,8 @@ def main():
 
 	print("\nPrecision sweep, near -> near at 26.3 km/s (star velocity error dominates):")
 	v = 26.3
-	first = reachable(field, (1,), v, -1)
-	pair = first + reachable(field, (2,), v, +1, {first[0][0]})
+	first = route.reachable(field, (1,), v, -1)
+	pair = first + route.reachable(field, (2,), v, +1, {first[0][0]})
 	for sv in (3.0, 1.0, 0.3, 0.1, 0.03):
 		res = planted(field, v, pair, replace(err, star_v=sv))
 		print(f"  star velocity error {sv:>5g} km/s: combined {res[3][2]:.1f} bits")

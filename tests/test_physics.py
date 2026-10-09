@@ -114,6 +114,18 @@ def test_route_p_values_match_brute_force():
 			assert p[k] == pytest.approx(mc, abs=4 * math.sqrt(mc / M) + 1e-5)
 
 
+def test_route_hipparcos_meets_gaia_at_its_epoch():
+	"""Barnard's star, the fastest across the sky, moves 4 arcmin between the catalogs' epochs; propagated, Hipparcos lands within MATCH of Gaia with the same space velocity."""
+	cols = "ra dec plx s_plx pmra s_pmra pmdec s_pmdec rv s_rv"
+	hip = dict(zip(cols.split(), "269.45402263 4.66828781 548.31 1.51 -798.58 1.72 10328.12 1.22 -110.6 0.2".split()))
+	gaia = dict(zip(cols.split(), "269.44850253 4.73942005 546.97594 0.04012 -801.55098 0.03182 10362.39421 0.03607 -110.46822 0.13126".split()))
+	h = route._kinematics([hip], cols, route.GAIA_YEAR - route.HIPPARCOS_YEAR)
+	g = route._kinematics([gaia], cols, 0.0)
+	assert route._near(h.unit, g.unit)[0]
+	assert not route._near(route._kinematics([hip], cols, 0.0).unit, g.unit)[0]
+	assert np.linalg.norm(h.vel - g.vel) < 1.0
+
+
 def test_route_aim_hits_star():
 	rng = np.random.default_rng(2)
 	field = route.Field.synthetic(rng)

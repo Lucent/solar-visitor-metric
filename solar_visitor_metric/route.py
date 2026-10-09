@@ -19,8 +19,10 @@ The route is scored as one itinerary, origin, Sun, destination: the arrival end 
 import math
 import os
 from dataclasses import dataclass, fields
+from types import SimpleNamespace
 
 import numpy as np
+from scipy.spatial import cKDTree
 from scipy.special import ndtr
 from scipy.stats import rice
 
@@ -35,6 +37,9 @@ HOP = 20.0           # pc from the Sun: the longest hop counted at either end
 V_FLOOR = 20.0       # km/s: fields are complete for visitors at least this fast
 R_MAX = 200.0        # pc: completeness cap, missing only stars faster than 180 km/s
 TOL = 0.5            # pc: stars a visitor can pass this close count as reachable
+MATCH = 2.0          # arcsec at the Gaia epoch: a Hipparcos star this close to a usable Gaia star is that star
+GAIA_YEAR = 2016.0
+HIPPARCOS_YEAR = 1991.25
 RV_SNR = 5.0         # Gaia DR3 radial velocities need rv_expected_sig_to_noise >= this
 V_ESC = 600.0        # km/s in the Galactic rest frame: faster stars are unbound, i.e. mismeasured
 ICRS_TO_GAL = np.array([[-0.0548755604162154, -0.8734370902348850, -0.4838350155487132],
@@ -80,37 +85,37 @@ class Field:
 					 None if self.ids is None else self.ids[idx])
 
 	@classmethod
-	def from_gaia(cls, path):
-		"""Gaia DR3 stars with radial velocities that could meet a visitor within HOP, ICRS barycentric frame.
+	def from_catalogs(cls, gaia_path, hipparcos_path):
+		"""Stars with radial velocities that could meet a visitor within HOP, ICRS barycentric at the Gaia epoch: Gaia DR3 wherever it has a usable radial velocity, and Hipparcos (van Leeuwen 2007) with Pulkovo radial velocities (Gontcharov 2006) for the stars it lacks.
 
-		Downloads the table from the Gaia archive if `path` is missing. Returns (field, errors, n_without_rv), the last counting stars within HOP today that lack a usable radial velocity and so cannot be traced. Per-star errors: velocity error per axis from parallax, proper-motion and RV errors.
+		Downloads either table if its path is missing. Returns (field, errors, n_untraced), the last counting stars within HOP today, in either catalog, with no usable radial velocity, which therefore cannot be traced. Per-star errors: velocity error per axis from parallax, proper-motion and RV errors.
 
-		Usable means rv_expected_sig_to_noise >= RV_SNR and a space velocity the Galaxy can hold. Low-S/N spectra leave spurious velocities of hundreds of km/s in DR3 (Katz et al. 2023, Sect. 9, who recommend the S/N cut for high-velocity work), and this selection is dominated by fast stars, since they can arrive from farther away. A spurious radial velocity is worse than noise here: real proper motion plus a huge radial speed makes a star's track run almost through the Sun, a fake close encounter. Stars faster than V_ESC about the Galactic center (escape is ~530 km/s, Deason et al. 2019) are such errors.
+		Gaia saturates on the brightest stars and measures radial velocities only for stars bright and cool enough, so Sirius, Vega and α Cen A, the neighbors everyone knows, come from Hipparcos, less precisely. A Hipparcos star counts only where no usable Gaia star lies within MATCH of it at the Gaia epoch; Gaia's own cross-match misses about 800 such pairs, most of them fast movers.
+
+		A Gaia radial velocity is usable at rv_expected_sig_to_noise >= RV_SNR, and any star only with a space velocity the Galaxy can hold. Low-S/N spectra leave spurious velocities of hundreds of km/s in DR3 (Katz et al. 2023, Sect. 9, who recommend the S/N cut for high-velocity work), and this selection is dominated by fast stars, since they can arrive from farther away. A spurious radial velocity is worse than noise here: real proper motion plus a huge radial speed makes a star's track run almost through the Sun, a fake close encounter. Stars faster than V_ESC about the Galactic center (escape is ~530 km/s, Deason et al. 2019) are such errors.
 		"""
 		import csv
-		if not os.path.exists(path):
-			fetch_gaia(path)
-		rows = list(csv.DictReader(open(path)))
-		within = lambda rows: sum(float(r["parallax"]) > 1000.0 / HOP for r in rows)
-		n_all = within(rows)
-		rows = [r for r in rows if r["radial_velocity"] and float(r["rv_expected_sig_to_noise"]) >= RV_SNR]
-		f = lambda k: np.array([float(r[k]) for r in rows])
-		ra, dec, plx = np.radians(f("ra")), np.radians(f("dec")), f("parallax")
-		D = 1000.0 / plx
-		rhat = np.stack([np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)], 1)
-		e_ra = np.stack([-np.sin(ra), np.cos(ra), np.zeros_like(ra)], 1)
-		e_dec = np.stack([-np.sin(dec) * np.cos(ra), -np.sin(dec) * np.sin(ra), np.cos(dec)], 1)
-		k = 4.740470446
-		vra, vdec, vr = k * f("pmra") / plx, k * f("pmdec") / plx, f("radial_velocity")
-		vel = vra[:, None] * e_ra + vdec[:, None] * e_dec + vr[:, None] * rhat
-		s_plx = f("parallax_error")
-		s_ra = k * np.hypot(f("pmra_error") / plx, f("pmra") * s_plx / plx ** 2)
-		s_dec = k * np.hypot(f("pmdec_error") / plx, f("pmdec") * s_plx / plx ** 2)
-		s_v = np.sqrt((s_ra ** 2 + s_dec ** 2 + f("radial_velocity_error") ** 2) / 3)
+		if not os.path.exists(gaia_path):
+			fetch_gaia(gaia_path)
+		if not os.path.exists(hipparcos_path):
+			fetch_hipparcos(hipparcos_path)
+		gaia = list(csv.DictReader(open(gaia_path)))
+		hip = list(csv.DictReader(open(hipparcos_path)))
+		usable = np.array([bool(r["radial_velocity"]) and float(r["rv_expected_sig_to_noise"]) >= RV_SNR for r in gaia])
+		g = _kinematics(gaia, "ra dec parallax parallax_error pmra pmra_error pmdec pmdec_error radial_velocity radial_velocity_error", 0.0)
+		h = _kinematics(hip, "RArad DErad Plx e_Plx pmRA e_pmRA pmDE e_pmDE RV e_RV", GAIA_YEAR - HIPPARCOS_YEAR)
+		has_rv = np.isfinite(h.vel[:, 0])
+		fill = has_rv & ~_near(h.unit, g.unit[usable]) & (h.D <= reach_radius(np.linalg.norm(np.nan_to_num(h.vel), axis=1)))
+		near = lambda x: x.D < HOP
+		n_untraced = ((near(g) & ~usable & ~_near(g.unit, h.unit[fill])).sum()
+					  + (near(h) & ~has_rv & ~_near(h.unit, g.unit)).sum())
+		ids = np.concatenate([[f"Gaia DR3 {r['source_id']}" for r in gaia], [f"HIP {r['HIP']}" for r in hip]])
+		pick = np.concatenate([usable, fill])
+		pos, vel, D = (np.concatenate([getattr(g, k), getattr(h, k)])[pick] for k in ("pos", "vel", "D"))
+		s_v, s_plx = (np.concatenate([getattr(g, k), getattr(h, k)])[pick] for k in ("s_v", "s_plx"))
 		bound = np.flatnonzero(np.linalg.norm(vel @ ICRS_TO_GAL.T + V_SUN_GAL, axis=1) < V_ESC)
-		field = cls(D[:, None] * rhat, vel, D, np.array([r["source_id"] for r in rows])).take(bound)
-		errors = Errors(star_v=s_v, parallax_mas=s_plx).take(bound)
-		return field, errors, n_all - (field.D < HOP).sum()
+		return (cls(pos, vel, D, ids[pick]).take(bound), Errors(star_v=s_v, parallax_mas=s_plx).take(bound),
+				int(n_untraced))
 
 	@classmethod
 	def synthetic(cls, rng, density=0.08,
@@ -128,6 +133,34 @@ class Field:
 		d = rng.normal(size=(len(vel), 3))
 		pos = d / np.linalg.norm(d, axis=1)[:, None] * r[:, None]
 		return cls(pos, vel, r)
+
+
+def _kinematics(rows, columns, years):
+	"""Unit vectors moved on by `years` of proper motion, distances, positions, space velocities (NaN without a radial velocity), and per-axis velocity and parallax errors, from catalog columns named in the order ra dec parallax and errors, pmra (times cos dec) and error, pmdec and error, radial velocity and error."""
+	ra, dec, plx, s_plx, pmra, s_pmra, pmdec, s_pmdec, rv, s_rv = (
+		np.array([float(r[c] or "nan") for r in rows]) for c in columns.split())
+	mas = math.radians(1 / 3.6e6)
+	dec = np.radians(dec)
+	ra = np.radians(ra) + pmra * years * mas / np.cos(dec)
+	dec = dec + pmdec * years * mas
+	unit = np.stack([np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)], 1)
+	e_ra = np.stack([-np.sin(ra), np.cos(ra), np.zeros_like(ra)], 1)
+	e_dec = np.stack([-np.sin(dec) * np.cos(ra), -np.sin(dec) * np.sin(ra), np.cos(dec)], 1)
+	k = 4.740470446
+	D = 1000.0 / plx
+	vel = (k * pmra / plx)[:, None] * e_ra + (k * pmdec / plx)[:, None] * e_dec + rv[:, None] * unit
+	s_ra = k * np.hypot(s_pmra / plx, pmra * s_plx / plx ** 2)
+	s_dec = k * np.hypot(s_pmdec / plx, pmdec * s_plx / plx ** 2)
+	s_v = np.sqrt((s_ra ** 2 + s_dec ** 2 + s_rv ** 2) / 3)
+	return SimpleNamespace(unit=unit, D=D, pos=D[:, None] * unit, vel=vel, s_v=s_v, s_plx=s_plx)
+
+
+def _near(a, b):
+	"""Which unit vectors in a have one in b within MATCH."""
+	if not len(a) or not len(b):
+		return np.zeros(len(a), bool)
+	d, _ = cKDTree(b).query(a, distance_upper_bound=math.radians(MATCH / 3600))
+	return np.isfinite(d)
 
 
 GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync"
@@ -153,6 +186,27 @@ def fetch_gaia(path):
 		body = r.read()
 	if not body.startswith(b"source_id"):
 		raise RuntimeError("unexpected Gaia archive response")
+	os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+	with open(path, "wb") as f:
+		f.write(body)
+
+
+VIZIER_TAP = "https://tapvizier.cds.unistra.fr/TAPVizieR/tap/sync"
+
+
+def fetch_hipparcos(path):
+	"""Hipparcos (new reduction, I/311) stars with parallax S/N > 10 within R_MAX, with Pulkovo radial velocities (III/252) where they exist, as CSV."""
+	from urllib.parse import urlencode
+	from urllib.request import urlopen
+	query = ('SELECT h.HIP, h.RArad, h.DErad, h.Plx, h.e_Plx, h.pmRA, h.e_pmRA, h.pmDE, h.e_pmDE, p.RV, p.e_RV '
+			 'FROM "I/311/hip2" AS h LEFT JOIN "III/252/table8" AS p ON h.HIP = p.HIP '
+			 f"WHERE h.Plx > {1000.0 / R_MAX} AND h.Plx > 10 * h.e_Plx")
+	data = urlencode({"REQUEST": "doQuery", "LANG": "ADQL", "FORMAT": "csv", "MAXREC": 200000,
+					  "QUERY": query}).encode()
+	with urlopen(VIZIER_TAP, data=data, timeout=600) as r:
+		body = r.read()
+	if not body.startswith(b"HIP,RArad"):
+		raise RuntimeError("unexpected VizieR response")
 	os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 	with open(path, "wb") as f:
 		f.write(body)
@@ -388,10 +442,10 @@ def random_unit(rng):
 	return x / np.linalg.norm(x)
 
 
-def null_route(field, v_inf, n, errors, seed=0, q_max=30.0):
+def null_route(field, v_inf, n, errors, seed=0, q_max=30.0, directions=None):
 	"""Route scores of n visitors with random arrival, perihelion, plane.
 
-	Impact parameters are uniform in area out to perihelion q_max.
+	Impact parameters are uniform in area out to perihelion q_max. Arrival directions are isotropic, or drawn from `directions` (unit vectors, e.g. `kinematic_directions`).
 	"""
 	rng = np.random.default_rng(seed)
 	g = 2 / (v_inf / V_UNIT_KMS) ** 2        # b^2 = q^2 + g q (AU)
@@ -405,7 +459,7 @@ def null_route(field, v_inf, n, errors, seed=0, q_max=30.0):
 	(f_in, e_in, w_in), (f_out, e_out, w_out) = ends
 	out = np.empty((n, 3))
 	for k in range(n):
-		V_in = v_inf * random_unit(rng)
+		V_in = v_inf * (random_unit(rng) if directions is None else directions[rng.integers(len(directions))])
 		b2 = b2max * rng.random()
 		q = 0.5 * (-g + math.sqrt(g * g + 4 * b2))
 		V_out = sun_turn(V_in, q, rng.uniform(0, 2 * math.pi))
@@ -454,11 +508,44 @@ def plan_route(field, i_from, i_to, v_inf):
 	return V_in, V_out, q
 
 
+
+def reachable(field, ranks, v_inf, sign, exclude=()):
+	"""First star at or after each hop rank that v_inf can meet exactly: (index, rank)."""
+	srt = np.argsort(hops(field, v_inf, sign))
+	out = []
+	for r in ranks:
+		for kk in range(r - 1, len(srt)):
+			if srt[kk] in exclude:
+				continue
+			V, t = aim_at(field.pos[srt[kk]], field.vel[srt[kk]], v_inf, sign)
+			if V is not None:
+				out.append((srt[kk], kk + 1))
+				break
+	return out
+
+
+def planted_bits(V_in, V_out, field, errors, draws=31, seed=0):
+	"""Median bits (origin, destination, combined) of a planned route over measurement-noise draws: the visitor passes exactly through both stars, the catalog sees it through its errors."""
+	rng = np.random.default_rng(seed)
+	rows = []
+	for _ in range(draws):
+		p_in, _, _ = end_score(field, V_in, -1, errors, rng)
+		p_out, _, _ = turn_score(field, V_in, V_out, errors, rng)
+		rows.append((p_in, p_out, combine(p_in, p_out)))
+	return np.median(-np.log2(np.maximum(rows, 1e-300)), axis=0)
+
+def kinematic_directions(field, v_inf, width=0.15):
+	"""Directions of motion of the field's stars whose speed relative to the Sun is within `width` of v_inf: the arrivals interstellar objects make if, natural or not, they move as stars do. A field's reach depends on speed alone, so within the band the directions are unbiased."""
+	w = np.linalg.norm(field.vel, axis=1)
+	band = np.abs(w / v_inf - 1) < width
+	return field.vel[band] / w[band, None]
+
+
 def _null_chunk(args):
 	return null_route(*args)
 
 
-def null_route_parallel(field, v_inf, n, errors, pool, chunks=72, seed=0):
+def null_route_parallel(field, v_inf, n, errors, pool, chunks=72, seed=0, directions=None):
 	per = n // chunks
-	parts = pool.map(_null_chunk, [(field, v_inf, per, errors, seed + c) for c in range(chunks)])
+	parts = pool.map(_null_chunk, [(field, v_inf, per, errors, seed + c, 30.0, directions) for c in range(chunks)])
 	return np.vstack(parts)

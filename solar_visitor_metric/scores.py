@@ -11,7 +11,7 @@ import random
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.stats import binom
+from scipy.stats import beta, binom
 
 from .constants import PLANETS
 from .flyby import Crossing, crossings, ecc, local_velocity, state_after
@@ -57,13 +57,13 @@ class Path:
 	def planet_ps(self, records=None):
 		"""One p per planet: chance that any of its crossings came this close.
 
-		p = 1 - (1 - p_min)^n_c over that planet's n_c crossings: exact if the crossings were independent, conservative under a common clock, where a planet's offsets at its inbound and outbound crossings are linked.
+		p = min(1, n_c p_min) over that planet's n_c crossings. On a common clock one phase sets the planet's offset at every crossing, so its windows are arcs of one circle: the chance of either is their union, n_c p_min when they are apart and less when they overlap. The independent-crossing fold 1 - (1 - p_min)^n_c falls short of the union and overstated common-clock nulls by up to 10%.
 		"""
 		best = {}
 		for r in (self.records if records is None else records):
 			pm, n = best.get(r[0], (1.0, 0))
 			best[r[0]] = (min(pm, r[2]), n + 1)
-		return [1 - (1 - pm) ** n for pm, n in best.values()]
+		return [min(1.0, n * pm) for pm, n in best.values()]
 
 	def visit_bits(self):
 		return order_bits(self.planet_ps())
@@ -85,14 +85,33 @@ class Path:
 
 
 def order_bits(ps):
-	"""-log2 of n * min_k P(at least k of n uniforms <= k-th smallest p)."""
+	"""-log2 of the exact null chance of a planet pattern this strong: the statistic t = min_k P(at least k of n uniforms <= k-th smallest p) counts one very close pass and several fairly close ones alike, and choosing the best k is paid for by t's own null distribution (`order_null`), not by a Bonferroni factor of n."""
 	n = len(ps)
 	if n == 0:
 		return 0.0
 	p = np.sort(np.asarray(ps))
-	k = np.arange(1, n + 1)
-	log_tail = binom.logsf(k - 1, n, p).min() + math.log(n)
-	return max(0.0, -log_tail / math.log(2))
+	t = binom.sf(np.arange(n), n, p).min()
+	return max(0.0, -math.log2(order_null(t, n)))
+
+
+def order_null(t, n):
+	"""P(min_k P(at least k of n <= U_(k)) <= t) for n independent uniforms, exactly.
+
+	The minimum is at most t when some order statistic U_(k) falls below c_k, the level-t quantile of its own Beta(k, n - k + 1) law; c_k rises with k, so the complement is the chance that at most k - 1 points lie below every c_k, summed over how many fall in each interval between the c's (multinomial weights). Planet p's at least as large as uniform under the null only make this conservative. Below t = 1e-10 the complement cancels in floating point, and the Bonferroni bound n t is used.
+	"""
+	if t >= 1:
+		return 1.0
+	if t < 1e-10:
+		return n * t
+	edges = np.concatenate([[0.0], beta.ppf(t, np.arange(1, n + 1), np.arange(n, 0, -1)), [1.0]])
+	ways = np.zeros(n + 1)
+	ways[0] = 1.0
+	for i in range(1, n + 2):
+		width = edges[i] - edges[i - 1]
+		cap = min(i - 1, n) if i <= n else n
+		ways = np.array([sum(ways[j] * width ** (m - j) / math.factorial(m - j) for j in range(m + 1)) if m <= cap else 0.0
+						 for m in range(n + 1)])
+	return 1.0 - math.factorial(n) * ways[n]
 
 
 # J2000 mean longitudes (deg), JPL approximate elements; time unit yr/(2 pi)

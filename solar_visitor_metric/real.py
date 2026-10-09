@@ -40,7 +40,10 @@ def elements(tag):
 	orb = d["orbit"]
 	el = {e["name"]: float(e["value"]) for e in orb["elements"] if e["value"] is not None}
 	el["epoch"] = float(orb["epoch"])
-	el["name"] = d["object"]["fullname"].strip()
+	o = d["object"]
+	el["name"] = o["fullname"].strip()
+	# the name without its provisional designation: 'Oumuamua (A/2017 U1) -> 'Oumuamua, C/2019 Q4 (Borisov) -> Borisov
+	el["short"] = el["name"].replace(f'{o["prefix"]}/{o["des"]}', "").strip(" ()")
 	return el
 
 
