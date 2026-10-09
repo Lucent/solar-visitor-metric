@@ -286,6 +286,17 @@ function extent(au) {
 	return au < 0.1 * PC ? `${fmt(au)} AU` : `${fmt(au / PC)} pc`;
 }
 
+// The fractions [from, to] of the step from a to b that lie within radius R of the Sun, empty (from > to) when none does.
+function within(a, b, R) {
+	const d = [0, 1, 2].map((c) => b[c] - a[c]);
+	const dd = d[0] ** 2 + d[1] ** 2 + d[2] ** 2;
+	const ad = a[0] * d[0] + a[1] * d[1] + a[2] * d[2];
+	const disc = ad ** 2 - dd * (a[0] ** 2 + a[1] ** 2 + a[2] ** 2 - R ** 2);
+	if (disc < 0)
+		return [1, 0];
+	return [Math.max(0, (-ad - Math.sqrt(disc)) / dd), Math.min(1, (-ad + Math.sqrt(disc)) / dd)];
+}
+
 function zoomed() {
 	const v = visitor();
 	form.radius.value = form.linear.checked ? "to scale throughout" : `to scale within ${extent(r0())}, logarithmic beyond`;
@@ -294,12 +305,16 @@ function zoomed() {
 	route = new Float32Array(v.path.length);
 	for (let i = 0; i < route.length; i += 3)
 		mapped(v.path[i], v.path[i + 1], v.path[i + 2], route, i);
+	// Drop lines only where they can be seen: drawn linearly, a million years of path runs to tens of millions of scene units, and spacing lines along all of it exhausts memory. Beyond `reach` from the Sun a point is past the far plane wherever the camera stands.
+	const reach = camera.far + camera.position.length();
 	const drops = [];
 	for (let i = 3, along = 0, next = 0; i < route.length; i += 3) {
 		const step = Math.hypot(route[i] - route[i - 3], route[i + 1] - route[i - 2], route[i + 2] - route[i - 1]);
 		if (!step)
 			continue;
-		for (; next <= along + step; next += CURTAIN) {
+		const [from, to] = within(route.subarray(i - 3, i), route.subarray(i, i + 3), reach);
+		next = Math.max(next, Math.ceil((along + from * step) / CURTAIN) * CURTAIN);
+		for (; next <= along + to * step; next += CURTAIN) {
 			const f = (next - along) / step;
 			const [x, y, z] = [0, 1, 2].map((c) => route[i - 3 + c] + (route[i + c] - route[i - 3 + c]) * f);
 			drops.push(x, y, z, x, y, 0);
