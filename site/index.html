@@ -3,9 +3,19 @@
  <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Solar visitor metric</title>
+  <title>Interstellar visitor paths</title>
   <meta name="description" content="Would a planned path through the solar system give itself away? The three interstellar visitors, scored in bits against calibrated chance.">
   <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three/examples/jsm/", "astronomy-engine": "https://cdn.jsdelivr.net/npm/astronomy-engine/esm/astronomy.js"}}</script>
+  <script>
+  // Ptree's: apply the saved (or OS) theme class before paint; the cascade derives color-scheme, and so every light-dark() color, from it.
+  {
+   const os = matchMedia("(prefers-color-scheme: dark)").matches;
+   const set = localStorage.getItem("Theme");
+   if (set === "Dark" || (os && set !== "Light"))
+    document.documentElement.classList.add("Dark");
+  }
+  </script>
+  <script type="module" src="dark.js"></script>
   <script type="module" src="app.js"></script>
   <style>
 /* The colors the WebGL scene reads are registered, so they compute to rgb() in the resolved scheme. */
@@ -15,11 +25,6 @@
 	initial-value: transparent;
 }
 @property --muted {
-	syntax: "<color>";
-	inherits: true;
-	initial-value: transparent;
-}
-@property --grid {
 	syntax: "<color>";
 	inherits: true;
 	initial-value: transparent;
@@ -39,52 +44,155 @@
 	inherits: true;
 	initial-value: transparent;
 }
+@property --plane {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: transparent;
+}
 @property --sun {
 	syntax: "<color>";
 	inherits: true;
 	initial-value: transparent;
 }
 :root {
-	color-scheme: light dark;
-	--plane: light-dark(#f9f9f7, #0d0d0d);
-	--surface: light-dark(#fcfcfb, #1a1a19);
+	color-scheme: light;
+	--plane: light-dark(#f9f9f7, #000000);
 	--ink: light-dark(#0b0b0b, #ffffff);
 	--ink2: light-dark(#52514e, #c3c2b7);
 	--muted: #898781;
 	--grid: light-dark(#e1e0d9, #2c2c2a);
+	--tile: light-dark(#efeee8, #171716);
 	--s1: light-dark(#2a78d6, #3987e5);
 	--s2: light-dark(#eb6834, #d95926);
 	--s3: light-dark(#1baf7a, #199e70);
 	--sun: #eda100;
+	--heat: light-dark(#7d4fd6, #a283f0);
+}
+.Dark {
+	color-scheme: dark;
 }
 body {
 	margin: 0;
 	display: grid;
-	grid-template: auto minmax(0, 1fr) auto auto / minmax(0, 1fr) minmax(20rem, 30rem);
-	block-size: 100dvh;
+	grid-template-columns: minmax(0, 1fr) minmax(20rem, 30rem);
+	align-items: start;
 	font-family: system-ui;
 	background: var(--plane);
 	color: var(--ink);
 }
 header {
+	position: relative;
 	grid-column: 1 / -1;
 	padding: 1rem 1.5rem 0.5rem;
 }
+/* Ptree's theme toggle: a crescent in the header's corner; the checkbox is the state, the label the control. */
+#dark {
+	position: absolute;
+	opacity: 0;
+}
+#dark + label {
+	position: absolute;
+	inset: 1rem 1.5rem auto auto;
+	display: grid;
+	place-items: center;
+	inline-size: 2.2rem;
+	block-size: 2.2rem;
+	border-radius: 50%;
+	color: var(--ink2);
+	cursor: pointer;
+}
+#dark + label:hover {
+	background: var(--tile);
+	color: var(--ink);
+}
+#dark:focus-visible + label {
+	outline: 2px solid var(--ink);
+}
+#dark + label svg {
+	inline-size: 1.3rem;
+	block-size: 1.3rem;
+}
+/* The two names a reader starts from, the question and the visitor, in the system's serif; everything else in its sans. */
+h1, h2:first-child {
+	font-family: ui-serif, Georgia, serif;
+	font-weight: 600;
+}
 h1 {
 	margin: 0;
-	font-size: 1.4rem;
+	padding-inline-end: 3rem;
+	font-size: clamp(1.6rem, 3vw, 2.2rem);
+	line-height: 1.15;
+	text-wrap: balance;
 }
 header p {
-	margin: 0.3rem 0 0;
-	max-inline-size: 70rem;
+	margin: 0.4rem 0 0;
+	max-inline-size: 60rem;
 	color: var(--ink2);
+	text-wrap: pretty;
+}
+header strong {
+	color: var(--ink);
+}
+/* Flybys, route and together side by side, each cell its own 25-bit track: the bar lies behind the number, as in Ptree's tiles, so the visitors' rows stay bare and the missions' run violet. */
+#verdict {
+	--columns: minmax(0, 1.25fr) repeat(3, minmax(0, 1fr));
+	column-gap: 0.5rem;
+	max-inline-size: 60rem;
+	margin-block-start: 0.8rem;
+	font-size: 0.85rem;
+}
+#verdict label {
+	font-weight: 600;
+	color: var(--ink);
+	cursor: pointer;
+}
+#verdict td {
+	text-align: start;
+	color: var(--ink2);
+}
+/* each cell its own tile, paper between the three tracks, so each band ends at its own column */
+#verdict tbody tr {
+	background: none;
+}
+#verdict tbody :is(th, td) {
+	border-radius: 4px;
+	background: var(--tile);
+}
+#verdict td[style] {
+	background: linear-gradient(color-mix(in oklab, var(--heat) calc(30% + min(var(--bits), 25) * 2.4%), transparent) 0 0) 0 / calc(min(var(--bits), 25) / 25 * 100%) 100% no-repeat, var(--tile);
+}
+#verdict td small {
+	margin-inline-start: 0.5rem;
+	color: var(--muted);
+}
+/* the odds ladder: everyday chances where they fall on each track */
+#verdict tfoot td {
+	position: relative;
+	block-size: 1.4rem;
+	padding: 0;
+	font-size: 0.7rem;
+	color: var(--muted);
+}
+#verdict tfoot span {
+	position: absolute;
+	inset-block-start: 0.2rem;
+	inset-inline-start: calc(var(--at) / 25 * 100%);
+	translate: -50%;
+	white-space: nowrap;
+}
+#verdict tfoot span::before {
+	content: "";
+	position: absolute;
+	inset: -0.2rem 50% auto;
+	block-size: 0.2rem;
+	border-inline-start: 1px solid var(--muted);
 }
 a {
 	color: var(--s1);
 }
 #scene {
 	position: relative;
-	background: var(--surface);
+	block-size: min(85svh, 60rem);
 	contain: size;
 }
 #scene > * {
@@ -95,25 +203,122 @@ a {
 	inline-size: 100%;
 	block-size: 100%;
 }
+/* What a thing is decides its color, once: the scene's marks, the key, and the panel's markers and bars all read it. Text stays in ink; a colored mark beside it carries the identity. */
+.visitor {
+	--tint: var(--s1);
+}
+.origin {
+	--tint: var(--s2);
+}
+.destination {
+	--tint: var(--s3);
+}
+.orbit, .shell {
+	--tint: var(--muted);
+}
 .label {
-	margin-inline-start: 0.6rem;
+	margin: 0 0 0.35rem 0.45rem;
 	pointer-events: none;
 	font-size: 0.75rem;
 	color: var(--ink2);
 	white-space: nowrap;
 }
 .label.shell {
+	margin: 0 0 0.15rem;
 	color: var(--muted);
 }
-.label.from {
-	color: var(--s2);
-}
-.label.to {
-	color: var(--s3);
-}
 .label.visitor {
-	color: var(--s1);
 	font-weight: 600;
+}
+.label {
+	transition: opacity 0.3s;
+}
+.label.fast {
+	opacity: 0;
+}
+#key {
+	inset: auto auto 0.75rem 0.75rem;
+	display: grid;
+	gap: 0.25rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 0.75rem;
+	color: var(--ink2);
+	pointer-events: none;
+}
+#key li::before {
+	content: "";
+	display: inline-block;
+	inline-size: 0.6rem;
+	block-size: 0.6rem;
+	margin-inline-end: 0.45rem;
+	vertical-align: -0.05rem;
+	border-radius: 50%;
+	background: var(--tint);
+}
+#key .meet::before {
+	background: none;
+	border: 2px solid var(--ink2);
+	box-sizing: border-box;
+}
+#key .orbit::before {
+	block-size: 1px;
+	vertical-align: 0.2rem;
+	border-radius: 0;
+}
+#key .shell::before {
+	background: none;
+	box-shadow: inset 0 0 0.2rem var(--tint);
+}
+/* Fit, as the thread browser has it: a chip in the view's corner that glides back to the view that follows the visitor. */
+#fit {
+	inset: 0.75rem auto auto 0.75rem;
+	z-index: 1;
+	display: flex;
+	inline-size: max-content;
+	block-size: max-content;
+	padding: 0.35em;
+	border: 1px solid var(--grid);
+	border-radius: 5px;
+	background: color-mix(in oklab, var(--plane) 88%, transparent);
+	color: var(--ink);
+	cursor: pointer;
+}
+#fit svg {
+	inline-size: 1.15em;
+	block-size: 1.15em;
+}
+#compass {
+	inset: auto 0.75rem 0.75rem auto;
+	inline-size: 6rem;
+	block-size: 6rem;
+	overflow: visible;
+	pointer-events: none;
+	fill: none;
+	stroke: var(--ink2);
+	stroke-width: 0.03;
+	font-size: 0.2px;
+}
+#compass .far {
+	stroke-dasharray: 0.06 0.05;
+	opacity: 0.5;
+}
+#compass .north {
+	stroke-width: 0.045;
+}
+#compass text {
+	fill: var(--ink2);
+	stroke: none;
+	text-anchor: middle;
+	dominant-baseline: middle;
+}
+#compass .center {
+	fill: var(--sun);
+	stroke: none;
+}
+#compass .center text {
+	fill: var(--muted);
 }
 #tip {
 	inset: 0 auto auto 0;
@@ -135,39 +340,134 @@ form {
 	gap: 0.5rem 1rem;
 	padding: 0.6rem 1.5rem;
 }
-input[type=range] {
-	flex: 1 1 12rem;
+/* Play is the page's one big control: a round button at the head of time, a triangle that becomes two bars while the visitor travels. It is still the checkbox, the state the code reads. */
+[name=play] {
+	appearance: none;
+	display: grid;
+	place-items: center;
+	flex: none;
+	inline-size: 3rem;
+	block-size: 3rem;
+	margin: 0;
+	border-radius: 50%;
+	background: var(--s1);
+	cursor: pointer;
+	transition: scale 0.15s;
+}
+[name=play]:hover {
+	scale: 1.06;
+}
+[name=play]:focus-visible {
+	outline: 2px solid var(--ink);
+	outline-offset: 2px;
+}
+[name=play]::before {
+	content: "";
+	inline-size: 1.1rem;
+	block-size: 1.2rem;
+	translate: 0.12rem;
+	background: var(--plane);
+	clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+[name=play]:checked::before {
+	translate: none;
+	background: linear-gradient(to right, var(--plane) 0 35%, transparent 35% 65%, var(--plane) 65%);
+	clip-path: none;
+}
+#time {
+	flex: 1 1 16rem;
+	display: grid;
+}
+#time input {
+	margin: 0;
+}
+/* Thumb-width inset, so the ruler's ends sit under the thumb's travel. */
+#ruler {
+	position: relative;
+	block-size: 1.6rem;
+	margin-inline: 0.5rem;
+	font-size: 0.7rem;
+	color: var(--muted);
+}
+#ruler::before {
+	content: "";
+	position: absolute;
+	inset: 0 0 auto;
+	block-size: 0.5rem;
+	background: var(--grid);
+	clip-path: var(--band);
+}
+#ruler span {
+	position: absolute;
+	inset-block-start: 0.55rem;
+	inset-inline-start: calc(var(--at) * 100%);
+	translate: -50%;
+	white-space: nowrap;
 }
 output {
-	min-inline-size: 11rem;
 	font-variant-numeric: tabular-nums;
 }
+[name=date] {
+	min-inline-size: 12rem;
+	font-weight: 600;
+}
+/* Time on the left, the view on the right. */
+label:has([name=zoom]) {
+	margin-inline-start: auto;
+}
+[name=radius] {
+	font-size: 0.8rem;
+	color: var(--muted);
+}
 aside {
-	grid-row: 2 / -1;
+	/* The view, its controls and the footer set the height; the panel contributes none, takes theirs, and scrolls within it. */
+	grid-row: 2 / span 3;
 	grid-column: 2;
+	align-self: stretch;
+	contain: size;
+	overflow: auto;
 	display: flex;
 	flex-wrap: wrap;
 	align-content: start;
-	gap: 0.4rem;
-	padding: 0 1.5rem 1.5rem;
-	overflow: auto;
+	gap: 0.5rem;
+	padding: 0.5rem 1.5rem 1.5rem;
 }
 [name=visitor] {
 	position: absolute;
 	opacity: 0;
 }
+/* The visitor buttons and Play are the page's controls: tiles to choose from, the chosen one filled solid in its color, its text reversed out, as Play is. */
 [name=visitor] + label {
-	padding: 0.3rem 0.7rem;
-	border: 1px solid var(--grid);
-	border-radius: 1rem;
+	flex: 1;
+	display: grid;
+	padding: 0.5rem 0.8rem;
+	border-radius: 0.5rem;
+	background: var(--tile);
+	color: var(--ink2);
 	cursor: pointer;
+	transition: background 0.15s;
+}
+[name=visitor] + label:hover {
+	background: color-mix(in oklab, var(--tint) 18%, var(--tile));
+}
+/* the tag, not the badge's number */
+[name=visitor] + label > b {
+	font-size: 1.5rem;
+	color: var(--ink);
+}
+[name=visitor] + label .bits {
+	margin-block-start: 0.3rem;
 }
 [name=visitor]:checked + label {
-	border-color: var(--s1);
-	color: var(--s1);
+	background: var(--tint);
+	color: var(--plane);
+}
+[name=visitor]:checked + label > b {
+	color: var(--plane);
 }
 [name=visitor]:focus-visible + label {
-	outline: 2px solid var(--s1);
+	outline: 2px solid var(--ink);
+	outline-offset: 2px;
 }
 article {
 	order: 1;
@@ -177,17 +477,90 @@ article {
 	display: none;
 }
 h2 {
-	margin: 0.8rem 0 0;
-	font-size: 1.05rem;
 	display: flex;
 	justify-content: space-between;
+	align-items: baseline;
+	margin: 1rem 0 0;
+	padding-block-start: 0.6rem;
+	border-block-start: 1px solid var(--grid);
+	font-size: 1.05rem;
 }
-h2 data {
+/* Labels of parts and columns are small capitals in gray, as Ptree heads its columns: they say where you are and step back. */
+h3, thead th, #verdict th[colspan] {
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+h3 {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin: 0.9rem 0 0.2rem;
+}
+/* a count is a tab on its label */
+h3 small {
+	margin-inline-start: 0.4em;
+	padding: 0.05em 0.45em;
+	border-radius: 3px;
+	background: var(--grid);
+	font-size: 0.95em;
+	letter-spacing: 0;
 	font-variant-numeric: tabular-nums;
+	color: var(--ink2);
+}
+h3 data {
+	font-size: 0.95rem;
+	letter-spacing: 0;
+	color: var(--ink);
+}
+sup {
+	margin-inline-start: 0.15em;
+	font-size: 0.6rem;
+	font-weight: normal;
+	letter-spacing: 0;
+	text-transform: none;
+	line-height: 0;
+}
+h2:first-child {
+	padding: 0;
+	border: 0;
+	font-size: 1.3rem;
+}
+/* Every score is a solid badge, the result shown as plainly as a download button: ink for chance, turning to the header's violet as the bits climb, fully violet at 10 bits, 1 in 1,000. The number is reversed out of it, large; the unit small. */
+.bits {
+	display: inline-flex;
+	align-items: baseline;
+	justify-self: start;
+	gap: 0.25em;
+	padding: 0.1em 0.65em;
+	border-radius: 1em;
+	background: color-mix(in oklch, var(--heat) calc(min(var(--bits), 10) * 10%), var(--ink));
+	font-size: 0.8rem;
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	text-transform: none;
+	white-space: nowrap;
+	color: var(--plane);
+}
+.bits b {
+	font-size: 1.4rem;
+	letter-spacing: -0.01em;
+	color: var(--plane);
+}
+:is(h3, #verdict, [name=visitor] + label) .bits b {
+	font-size: 1.05rem;
 }
 article p {
 	margin: 0.3rem 0;
 	color: var(--ink2);
+}
+/* The plain-language reading of each score comes first, in ink; the method follows in gray. */
+article .lead {
+	font-size: 1.05rem;
+	font-weight: 600;
+	color: var(--ink);
 }
 button[value] {
 	padding: 0;
@@ -198,42 +571,65 @@ button[value] {
 	text-decoration: underline dotted;
 	cursor: pointer;
 }
+/* Every table is a column of tiles, Ptree's grammar: one row per thing, name at the start and values at the end on one line, 2px of paper between, and a score as a bar behind the row on a track of ten bits, so an empty tile reads as nothing found. */
 table {
+	display: grid;
+	grid-template-columns: var(--columns);
+	row-gap: 2px;
 	inline-size: 100%;
-	border-collapse: collapse;
-	font-size: 0.9rem;
+	font-size: 0.85rem;
 	font-variant-numeric: tabular-nums;
 }
+thead, tbody, tfoot {
+	display: contents;
+}
+tr {
+	display: grid;
+	grid-column: 1 / -1;
+	grid-template-columns: subgrid;
+	align-items: center;
+}
+tbody tr {
+	border-radius: 4px;
+	background: var(--tile);
+}
+article tbody tr {
+	background: linear-gradient(color-mix(in oklab, var(--tint) 32%, transparent) 0 0) 0 / calc(min(var(--bits, 0), 10) * 10%) 100% no-repeat, var(--tile);
+}
+th, td {
+	padding: 0.3rem 0.5rem;
+	text-align: end;
+	white-space: nowrap;
+}
 th {
-	text-align: start;
 	font-weight: normal;
 }
-td, th {
-	padding: 0.15rem 0.4rem 0.15rem 0;
+:is(th, td):first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: start;
 }
-/* Every score is bits; one bar per row, ten bits to full width. */
-[style*="--bits"] > :last-child::after {
-	content: "";
-	display: block;
-	block-size: 0.35rem;
-	inline-size: calc(min(var(--bits), 10) * 10%);
-	min-inline-size: 2px;
-	background: var(--s1);
-	border-radius: 0 2px 2px 0;
+tbody th {
+	color: var(--ink);
 }
-ol {
-	margin: 0.3rem 0;
-	padding-inline-start: 1.2rem;
-	font-size: 0.9rem;
+thead th {
+	padding-block: 0 0.1rem;
 }
-li {
-	margin-block: 0.3rem;
+#verdict th {
+	text-align: start;
 }
-.from li::marker {
-	color: var(--s2);
+#verdict th[colspan] {
+	grid-column: 1 / -1;
+	padding-block-start: 0.7rem;
 }
-.to li::marker {
-	color: var(--s3);
+#verdict th[colspan] {
+	background: none;
+}
+.planets {
+	--columns: minmax(0, 1fr) repeat(4, max-content);
+}
+:is(.origin, .destination) {
+	--columns: minmax(0, 1fr) repeat(3, max-content);
 }
 footer {
 	grid-column: 1;
@@ -244,7 +640,6 @@ footer {
 @media (width < 52rem) {
 	body {
 		grid-template: none;
-		block-size: auto;
 	}
 	#scene {
 		block-size: 70svh;
@@ -252,25 +647,40 @@ footer {
 	aside {
 		grid-row: auto;
 		grid-column: auto;
-		overflow: visible;
+		contain: none;
 	}
 }
   </style>
  </head>
  <body>
 <header>
-<h1>Would a planned path give itself away?</h1>
-<p>Three objects from other stars have crossed the solar system. Each path is scored in bits of surprise against chance: how close it came to the planets, whether they bent it, and whether it came from or is heading to a nearby star. Inside the zoom radius the picture is to scale; beyond it, distances are logarithmic, so the planets and stars a hundred parsecs away share one view. Scroll to zoom, drag to turn, and slide time from a million years ago to a million years ahead.</p>
+<input type="checkbox" id="dark"><label for="dark" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg viewBox="-50 -50 100 100" aria-hidden="true"><defs><mask id="Moon"><rect x="-50" y="-50" width="100" height="100" fill="#fff"/><circle cx="40" cy="-15" r="45" fill="#000"/></mask></defs><circle cx="10" cy="0" r="45" mask="url(#Moon)" fill="currentColor"/></svg></label>
+<h1>Are interstellar visitors alien probes?</h1>
+<p>Three objects from other stars have crossed the solar system since 2017. A mission would leave traces that chance rarely does: <b>flybys</b> close enough to the planets to borrow their gravity, and a <b>route</b> from one star to another with the Sun as a stop between. Both are scored against random arrivals at the same speed, in bits: each bit halves the odds, so 10 bits is 1 in 1,000. Together scores the two as one test, which costs a little for having looked in two places. <strong>None of the three left either trace.</strong></p>
+<table id="verdict"></table>
 </header>
-<section id="scene" aria-label="The selected visitor's path among the planets and nearby stars"><div id="tip"></div></section>
+<section id="scene" aria-label="The selected visitor's path among the planets and nearby stars"><div id="tip"></div>
+<button type="button" id="fit" title="Fit to view" aria-label="Fit to view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/><path d="M9 7l3-3 3 3M9 17l3 3 3-3M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg></button>
+<svg id="compass" viewBox="-1 -1 2 2" aria-hidden="true"><path class="far"/><path class="near"/><path class="north"/><text>N</text><g class="center"><circle r="0.06"/><text y="-0.16">Galactic center</text></g></svg>
+<ul id="key">
+<li class="visitor">visitor</li>
+<li class="origin">origin</li>
+<li class="destination">destination</li>
+<li class="meet">star pass</li>
+<li class="orbit">orbit</li>
+<li class="shell">distance from Sun</li>
+</ul>
+</section>
 <form id="controls">
+<input type="checkbox" name="play" aria-label="Play">
 <button type="button" id="now">Now</button>
-<input type="range" name="u" min="-1" max="1" step="0.0002" aria-label="Time">
+<span id="time"><input type="range" name="u" min="-1" max="1" step="0.0002" aria-label="Time"><span id="ruler" aria-hidden="true"></span></span>
 <output name="date"></output>
-<label><input type="checkbox" name="play"> Play</label>
-<label>Zoom <input type="range" name="zoom" min="-2" max="6.5" step="0.01" value="0.3"></label>
+<label>Zoom <input type="range" name="zoom" min="-2" max="6.5" step="0.01" value="0.8"></label>
+<label><input type="checkbox" name="linear"> Linear</label>
+<output name="radius"></output>
 </form>
 <aside></aside>
-<footer>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</footer>
+<footer>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3 and Hipparcos, named by <a href="https://simbad.cds.unistra.fr/">SIMBAD</a>. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</footer>
  </body>
 </html>
