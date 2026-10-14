@@ -10,31 +10,33 @@ solar-visitor-metric provides that number. It borrows the idea behind assembly t
 
 ## Findings
 
-**None of the three known visitors shows any trace of a planned path.**
+**One visitor passed the planets more closely than chance usually allows. None followed a route between stars.**
 
-| | v∞ | Planet visits | Planets' pull on its outbound path | Star-to-star route |
-|---|---|---|---|---|
-| 1I/ʻOumuamua | 26.4 km/s | 1.4 bits | 0.13% of v∞ | 0 bits |
-| 2I/Borisov | 32.3 km/s | 0.3 bits | 0.02% | 0 bits |
-| 3I/ATLAS | 58.0 km/s | 0.9 bits | 0.12% | 0 bits |
+| | v∞ | Perihelion | Planets | Route between stars | Together |
+|---|---|---|---|---|---|
+| 1I/ʻOumuamua | 26.4 km/s | 0.26 AU | 2.8 bits | 0.5 bits | 1.6 bits |
+| 2I/Borisov | 32.3 km/s | 2.01 AU | 0.05 bits | 0.2 bits | 0 bits |
+| 3I/ATLAS | 58.0 km/s | 1.36 AU | **8.2 bits** | 0 bits | 5.5 bits |
 
-3I/ATLAS passed Jupiter at 0.358 AU on 16 March 2026, almost exactly one Hill radius, and Mars at 0.194 AU on 3 October 2025. That looks pointed until you ask how often a randomly placed Jupiter comes that close: **3% of the time**, and Mars 19%. Allow for the fact that eight planets were available to be "visited" and the surprise drops to 0.9 bits: a pattern this strong turns up for about one random arrival in two. ʻOumuamua's best, 1.4 bits, is its pass 24 million km from Earth, five days before it was found. The Jupiter pass changed 3I's velocity by about a thousandth, a hundred times short of anything a mission designer would call a gravity assist. Traced back and forward against the 79,001 stars of Gaia DR3 and Hipparcos that could have met a visitor within 20 parsecs of the Sun, none of the three came from or is heading for any of them more closely than chance routinely manages: every random visitor at its speed scores at least as well.
+**3I/ATLAS threaded three planets: 8.2 bits, about one chance in 300.** It passed Mars at 0.194 AU on 3 October 2025, Venus at 0.649 AU on 3 November 2025 and Jupiter at 0.358 AU on 16 March 2026. Among visitors arriving at its speed and perihelion distance in any orientation and at any time, 2.1% pass Mars that close, 1.0% Venus and 0.3% Jupiter, and the three together happen about once in 300 arrivals. What makes it so is the plane of its orbit, within 5° of the ecliptic, where the planets are: holding its orientation as observed and randomizing only its timing leaves 2.4 bits. Drawing arrivals from the directions the catalog's stars actually move in, rather than evenly from the whole sky, makes the passes rarer still: 8.7 bits. A planned tour at its speed sets the scale: passing Earth, Mars and Jupiter each within 0.05 AU scores 16.8 bits, one chance in 115,000.
 
-The one genuinely unusual fact about 3I is the one Loeb leads with. Its orbit lies within 5° of the ecliptic, which an isotropic arrival does about once in 275 tries: **8 bits**, a real coincidence, but a single one among the many features that could have been checked.
+**ʻOumuamua's best is Earth, Borisov's nothing.** 1I passed Earth at 0.161 AU on 14 October 2017, five days before it was discovered; 1.7% of random arrivals at its speed and perihelion come that close, and with its other passes it scores 2.8 bits. 2I passed no planet more closely than a random arrival typically does.
 
-**A planned path would stand out, and by a wide margin.** Chance gives two velocity-changing flybys (≥ 10% each) to roughly one in three million in-plane visitors at ʻOumuamua's speed (**22 bits**), and one in a hundred million at 3I's (**27 bits**). A chance chain falls off roughly as the fourth power of speed, because fast objects barely bend. Real paths flown in a full N-body simulation score accordingly:
+**None came from or is heading for a star.** Traced back and forward against the 79,001 stars of Gaia DR3 and Hipparcos that could have met a visitor within 20 parsecs of the Sun, the best route is ʻOumuamua's, 0.5 bits; half of all random arrivals at its speed do as well. 3I's closest origin, the young flare-star pair AT Mic B, which it missed by 0.39 parsecs (1.8°) 210,000 years ago, is a one-in-3,800 pass on its own; but the best of about 2,000 stars tried typically reaches one in 2,000 by chance, so it scores nothing. Two independent searches of Gaia for 3I's birthplace found dozens of sub-parsec encounters and no plausible parent ([Pérez-Couto et al. 2025](https://arxiv.org/abs/2509.03361); [Guo et al. 2025](https://arxiv.org/abs/2509.07678)).
 
-| Planned path at 26 km/s | Visits | Assist | Combined |
+**A planned path would stand out.** Three missions flown at 3I's speed among the planets as they were for 3I, each scored by the same tests:
+
+| Simulated mission at 58 km/s | Planets | Route | Together |
 |---|---|---|---|
-| Earth and Mars at 1.5 million km, then a Jupiter assist | 13.2 bits | 10.3 bits | **17 bits** |
-| Earth and Mars at 150,000 km, then a Jupiter assist | 21.1 bits | 10.3 bits | **24 bits** |
-| Jupiter assist alone | 4.5 bits | 10.3 bits | 11 bits |
+| A tour passing Earth, Mars and Jupiter, each within 0.05 AU | 16.8 bits | 0 | 13.1 bits |
+| From Sirius around the Sun to α Centauri A | 0 | 13.4 bits | 10.1 bits |
+| That route's own path, timed to pass Earth at 0.26 AU and Mars at 0.54 AU | 2.9 bits | 13.4 bits | 12.7 bits |
 
-A targeted Jupiter → Saturn chain flown in REBOUND misses Saturn by 5.2 AU when Jupiter's mass is switched off: every significant chain is causally dependent on its first flyby, so the second encounter is no coincidence. And all of these are in-plane numbers. In three dimensions each flyby must also hit the planet's orbital plane to within its target distance, a further factor of about 2 × 10⁻³ per flyby by direct Monte Carlo, so a chance two-flyby chain sits beyond **40 bits**.
+Across 60 random planned tours, one to four planets each passed within 0.03–0.5 AU, the planet score averages 13.4 bits. On the real catalog, with its own errors, a route planted from the nearest star a visitor can reach to the next scores 7.5 bits at ʻOumuamua's speed, 8.2 at Borisov's and 11.8 at 3I's.
 
-**The solar system is, for this purpose, two planets.** At interstellar speeds Mercury, Venus, Earth and Mars cannot change a visitor's velocity by 10% even on a grazing pass, and Jupiter ↔ Saturn accounts for nearly nine chance chains in ten. Merely entering a planet's sphere of influence, by contrast, is common: one in-plane visitor in twenty enters at least one, which is why "it came within the Hill radius" carries almost no information.
+**Three closest passes, taken together.** Each planet's pass is a chance in its own right, how often a random arrival comes that close to that planet; the score is the chance of the three smallest, taken together and calibrated against random arrivals. Of ten ways tried to combine the eight planets, all calibrated alike, it catches random planned tours best: 13.4 bits on average, against 12.0 for Fisher's method over all eight and 8.6 for the nearest pass measured in planet radii. A single very close pass dominates it, and two or three moderate ones compound. The statistic was chosen on planned tours before the visitors were scored with it.
 
-**A stellar itinerary is detectable, and precision is the lever.** On a synthetic neighborhood with realistic stellar motions, a visitor planted to come from one nearby star and turn at the Sun for another scores 11.6–15.1 bits; one threading far stars scores almost nothing, because the stars' own velocity errors smear where they were a million years ago. Every threefold improvement in stellar velocities buys about 4 bits: 3.3 bits at 3 km/s errors, 11.6 at 0.3 km/s, 20.2 at 0.03 km/s. On the real catalog, with its own errors, a route planted from the nearest star a visitor can reach to the next scores 7.5 bits at ʻOumuamua's speed, 8.2 at Borisov's and 11.8 at 3I's. Flyby and route add up: at 3I's speed a Jupiter assist alone scores 12.8 bits, a route from Sirius around the Sun to α Centauri A 13.4, and a mission doing both 20.8. Scored as one test, either alone counts about 9 bits, the price of having looked for both.
+**A stellar itinerary is detectable, and precision is the lever.** On a synthetic neighborhood with realistic stellar motions, a visitor planted to come from one nearby star and turn at the Sun for another scores 11.6–15.1 bits; one threading far stars scores almost nothing, because the stars' own velocity errors smear where they were a million years ago. Every threefold improvement in stellar velocities buys about 4 bits: 3.3 bits at 3 km/s errors, 11.6 at 0.3 km/s, 20.2 at 0.03 km/s.
 
 **A traveler favors near stops, but not one star.** Which stars a visitor would plausibly aim for is a weight, separate from how precisely it aimed. Weights falling as the fourth power of the meeting distance, each doubling of distance getting half the share of the one before, with meetings nearer than 2 parsecs counted as 2, detect planted routes best of 24 falloffs and floors tried: 8.1 bits on average, against 3.7 with every star weighted equally. Without the floor, the one or two stars met nearest the Sun take most of the budget. No choice among the 24 gives any visitor a route: the best, ʻOumuamua's, is 0.9 bits before paying for having tried 24.
 
@@ -48,15 +50,15 @@ A targeted Jupiter → Saturn chain flown in REBOUND misses Saturn by 5.2 AU whe
 
 ## How it works
 
-**Visit.** For every planet, the score asks what fraction of the planet's possible positions along its orbit would have brought it at least as close as it actually came. That is a p-value. Across the planets, an order statistic asks how surprising it is that *k* planets were all this close, for the best *k*, and corrects for having tried every *k* by that choice's exact chance distribution: one very close pass and several fairly close ones both count, and a near-miss is never diluted by the planets that were nowhere near. Earth counts like any other planet. Visitors are found because they pass near us, which favors a close Earth pass; a visitor interested in life would favor one too, and the score takes neither side.
-
-**Assist.** The visitor is flown twice, once among the real planets and once in a universe where all their mass sits in the Sun at the barycenter, and the two outbound asymptotes are compared. For the real objects the change is split into the planets' direct pull and the Sun's own reflex wobble, which shifts every visitor's perihelion a little and is nothing a trajectory could exploit.
+**Planets.** A visitor's path is its two-body hyperbola about the Sun, and the planets move on their real orbits; planetary gravity plays no part, because closeness is geometry. For every planet, the chance that a random arrival passes it at least as closely is measured against a million random arrivals with the visitor's speed and perihelion distance, which discovery fixes, in uniformly random orientations and at random times across 10,000 years of the planets' motion, which a planner would choose. A path in the planets' plane and timed to meet several of them therefore scores for both. The three smallest chances are multiplied, and that product is calibrated against another million random arrivals, so planets passed together on one path are allowed for. Earth counts like any other planet: visitors are found because they pass near us, which favors a close Earth pass, and a visitor interested in life would favor one too.
 
 **Route.** Inbound and outbound asymptotes are straight lines through a field of moving stars. For the origin, the exact chance that an isotropic arrival at this speed passes each star this closely is computed by integrating over the sphere of possible relative velocities; it is the solid angle of the miss, so it measures the aim in degrees, the same for any star. For the destination, the chance is taken over the circle of departures the Sun's turn allows, given the arrival. Both are convolved with the measurement noise of the miss. Which star was worth aiming for is a separate weight, falling as the fourth power of the distance at which the visitor could meet it, nearer than 2 parsecs counted as 2: the preference for near stops of the [traveling salesman problem](https://en.wikipedia.org/wiki/Traveling_salesman_problem), the score's main assumption about what a planned route looks like. The two ends do not say the same thing. A high origin score means a recent stellar origin, which a natural object ejected by a nearby star within the last few million years would also show; only the destination, a next star the path is aimed at, has no natural reason. The chances assume arrivals from every direction alike, while real interstellar objects, natural or not, move as stars do; drawn instead from the motions of the catalog's own stars at each visitor's speed, random arrivals reach a route score no more often than its bits allow, P(bits ≥ x) · 2ˣ between 0.67 and 0.96 from 1 to 8 bits, against 0.72 to 0.89 for directions at random, so the score reports one number.
 
-**What it does not test.** The planned paths are borrowed from human missions: gravity assists and close passes are what weak propulsion requires. A probe that propels itself needs neither, and a large telescope could survey Earth from several AU, so 0 bits rules out a mission like ours, not design in general. Propulsion is out of scope too: orbits are taken as JPL fitted them, and ʻOumuamua's non-gravitational acceleration, the anomaly the debate turns on, is not scored.
+**Together.** Planets and route combine as two chances, p₁p₂(1 − ln p₁p₂), so looking in both places is paid for and a strong result in one still counts. Both scores randomize the arrival direction, so they could move together under chance; scored for both on the same 36,000 random paths at each visitor's speed and perihelion, they are uncorrelated (the correlation of their logarithms stays within ±0.05) and the combination stays calibrated, P(bits ≥ x) · 2ˣ between 0.68 and 0.97 from 1 to 8 bits.
 
-**The null is the product.** Planets are given random phases; arrivals are swept over impact parameter, and in a second, time-progressed version over heading and epoch with the real planets advancing on one clock. The two agree. Flybys are patched conics, checked against REBOUND N-body integration to within half a percent. Every score is tested against millions of chance visitors to confirm that P(score ≥ x) never exceeds 2⁻ˣ: a score is allowed to understate evidence, never to overstate it.
+**What it does not test.** The planned paths are close passes and stellar itineraries, what a probe surveying the planets or stopping at stars would leave behind. A large telescope could survey Earth from several AU, and a probe could go somewhere without passing anything, so 0 bits rules out a visit of this kind, not design in general. Propulsion is out of scope too: orbits are taken as JPL fitted them, and ʻOumuamua's non-gravitational acceleration, the anomaly the debate turns on, is not scored.
+
+**The null is the product.** Every score is −log₂ of a chance under an explicit model of random arrivals, and every one is checked against chance arrivals to confirm that P(score ≥ x) never exceeds 2⁻ˣ: a score is allowed to understate evidence, never to overstate it.
 
 Orbits come from JPL's Small-Body Database, planet states from JPL Horizons, and stars from Gaia DR3, with Hipparcos (van Leeuwen 2007) and Pulkovo radial velocities (Gontcharov 2006) for those Gaia cannot measure, named from SIMBAD, all fetched on first use. When a fourth interstellar object is discovered, `real_visitors.py 4I` scores it.
 
@@ -65,13 +67,13 @@ Orbits come from JPL's Small-Body Database, planet states from JPL Horizons, and
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && mkdir -p out
 .venv/bin/python -m pytest -q
-.venv/bin/python run.py > out/report.txt          # chance of 1–3 velocity-changing flybys per perihelion ring
-.venv/bin/python score.py > out/scores.txt        # visit and assist scores of planned paths (before real_visitors.py)
-.venv/bin/python route_check.py > out/route.txt   # route score on a synthetic star field
-.venv/bin/python real_visitors.py > out/real.txt  # 1I, 2I, 3I against JPL planets and Gaia DR3, and the site's data
-.venv/bin/python -m http.server -d site           # the explorer, locally
-.venv/bin/python factor3d.py                      # in-plane to 3D factor for one Jupiter flyby
+.venv/bin/python real_visitors.py > out/real.txt          # 1I, 2I, 3I, the missions, and the site's data
+.venv/bin/python statistic_check.py > out/statistic.txt   # how to combine the planets, by power on planned tours
+.venv/bin/python route_check.py > out/route.txt           # the route score on a synthetic star field
+.venv/bin/python falloff_check.py > out/falloff.txt       # how steeply the route favors near stars, by power on planted routes
 .venv/bin/python kinematic_check.py > out/kinematic.txt   # route calibration under arrivals moving as stars do
+.venv/bin/python together_check.py > out/together.txt     # planets and route calibrated together
+.venv/bin/python -m http.server -d site                   # the explorer, locally
 ```
 
 Figures are written as SVG to `out/`; the explorer in `site/` is published to GitHub Pages on every push that changes it. Architecture, decisions and conventions are in [AGENTS.md](AGENTS.md).

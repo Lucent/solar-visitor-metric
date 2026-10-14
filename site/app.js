@@ -19,7 +19,7 @@ const SPAN = Math.asinh(data.time.span / data.time.tau);
 const form = document.forms[0];
 const stars = { pos: Float64Array.from(data.stars.pos), vel: Float64Array.from(data.stars.vel) };
 const visitors = Object.fromEntries(data.visitors.map((v) => [v.tag, { ...v, path: Float64Array.from(v.path) }]));
-const planetNames = data.visitors[0].planets.map((p) => p.name);
+const planetNames = data.visitors[0].planets.passes.map((p) => p.name);
 
 // One law for space and time. A distance r is drawn at asinh(r / r0): to scale inside the zoom radius r0, one unit per factor of e beyond it; or, with Linear checked, at r / r0 everywhere. The slider u runs time the same way, t - t_peri = tau sinh(u asinh(span / tau)).
 const r0 = () => 10 ** form.zoom.value;
@@ -441,7 +441,7 @@ const method = (part) => `<sup><a href="${REPO}#:~:text=${encodeURIComponent(par
 const named = (i) => data.stars.names[i] || data.stars.ids[i];
 const simbad = (i) => `https://simbad.cds.unistra.fr/simbad/sim-id?Ident=${encodeURIComponent(data.stars.ids[i])}`;
 const star = (i) => `<a href="${simbad(i)}" title="${data.stars.ids[i]}">${named(i)}</a>`;
-const best = (v) => Math.max(v.visit, v.route.bits);
+const best = (v) => Math.max(v.planets.bits, v.route.bits);
 
 function bits(b) {
 	return `<data class="bits" value="${b}" style="--bits: ${b}"><b>${fmt(b)}</b> bits</data>`;
@@ -455,29 +455,25 @@ function stop(s) {
 function closest(v) {
 	if (best(v) == 0)
 		return "Neither trace: every random arrival at its speed does as well.";
-	const [kind, b] = v.visit >= v.route.bits ? ["flybys", v.visit] : ["route", v.route.bits];
+	const [kind, b] = v.planets.bits >= v.route.bits ? ["planet passes", v.planets.bits] : ["route", v.route.bits];
 	return `Closest to planned: its ${kind}, ${fmt(b)} bits. ${chance(2 ** -b)} random arrivals do as well.`;
 }
 
 function panel(v) {
-	const a = v.assist;
 	const plan = v.route.planned;
 	return `<input type="radio" name="visitor" form="controls" id="v${v.tag}" value="${v.tag}"><label for="v${v.tag}" class="visitor"><b>${v.tag}</b>${v.short}${bits(best(v))}</label>
 <article class="visitor">
 <h2><a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${v.tag}">${v.name}</a></h2>
 <p class="lead">${closest(v)}</p>
 <p>${fmt(v.vinf, 3)} km/s far out · perihelion ${fmt(v.q, 3)} AU · <button type="button" value="${v.tp}">${when(v.tp)}</button></p>
-<h2><span>Flybys${method("Visit. For every planet")}</span>${bits(v.visit)}</h2>
-<p class="lead">${chance(2 ** -v.visit)} random arrivals pass the planets as closely.</p>
-<p>Each planet at a random point on its orbit; the score covers all eight together.</p>
+<h2><span>Planets${method("Planets. A visitor")}</span>${bits(v.planets.bits)}</h2>
+<p class="lead">${chance(2 ** -v.planets.bits)} random arrivals pass the planets as closely.</p>
+<p>Random arrivals keep its speed and perihelion but take any direction and any time. So lying in the ecliptic counts, and so does meeting several planets. The score is the chance of its three closest passes together.</p>
 <h3>Planet passes</h3>
 <table class="planets">
 <thead><tr><th></th><th>closest</th><th>planet radii</th><th>date</th><th>chance</th></tr></thead>
-${v.planets.map((p) => `<tr style="--bits: ${-Math.log2(p.p)}"><th>${p.name}</th><td>${fmt(p.d)} AU</td><td>${Math.round(p.radii).toLocaleString()}</td><td><button type="button" value="${p.jd}">${when(p.jd)}</button></td><td>${pct(p.p)}</td></tr>`).join("\n")}
+${v.planets.passes.map((p) => `<tr style="--bits: ${-Math.log2(p.p)}"><th>${p.name}</th><td>${fmt(p.d)} AU</td><td>${Math.round(p.radii).toLocaleString()}</td><td><button type="button" value="${p.jd}">${when(p.jd)}</button></td><td>${pct(p.p)}</td></tr>`).join("\n")}
 </table>
-<h3><span>Gravity assist${method("Assist. The visitor is flown twice")}</span><data value="${a.direct}">${pct(a.direct)}</data></h3>
-<p class="lead">The planets' pull changed its outbound velocity by ${pct(a.direct)}. A spacecraft's gravity assist changes it by 10% or more.</p>
-<p>The Sun's reflex wobble, which shifts every visitor's perihelion a little and is nothing a trajectory could exploit, makes the total ${pct(a.total)}.</p>
 <h2><span>Route${method("Route. Inbound and outbound")}</span>${bits(v.route.bits)}</h2>
 <p class="lead">${chance(v.route.beaten)} random arrivals pass nearby stars as closely before and after the Sun.</p>
 <p>A route planned at this speed from the nearest star it can reach, ${star(plan.origin)}, to the next, ${star(plan.destination)}, scores ${fmt(plan.bits)} bits on the same catalog.</p>
@@ -492,17 +488,24 @@ ${v.route[end].stars.map(stop).join("")}
 
 document.querySelector("aside").innerHTML = data.visitors.map(panel).join("\n");
 
-// The verdict: flybys, route and both together for each visitor, then for three missions flown at one speed. The visitor names select them.
+// The verdict: planets, route and the two together for each visitor, then for three missions flown at 3I's speed. The visitor names select them.
 // The visitors' scores are the result, badged; the missions are the yardstick, plain.
 const cell = (b, badge) => `<td style="--bits: ${b}">${badge ? bits(b) : `${fmt(b)} bits`}<small>${chance(2 ** -b)}</small></td>`;
-const cells = (r, badge) => cell(r.flybys, badge) + cell(r.route, badge) + cell(r.together, badge);
+const cells = (r, badge) => cell(r.planets, badge) + cell(r.route, badge) + cell(r.together, badge);
 const m = data.missions;
-const mission = { flybys: m.flyby, route: `${named(m.origin)} to ${named(m.destination)}, turning at the Sun`, both: "Both at once" };
+const listed = (names) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+const passed = (passes) => listed(Object.entries(passes).map(([name, d]) => `${name} at ${fmt(d)} AU`));
+// A mission says what it did in a few words; its distances wait on hover.
+const mission = {
+	tour: (r) => [`Skims ${listed(Object.keys(r.passes))}`, `each within ${fmt(Math.max(...Object.values(r.passes)))} AU`],
+	route: () => [`${named(m.origin)} to ${named(m.destination)}, via the Sun`, "through both stars, seen through the catalog's errors"],
+	both: (r) => [`Both, past ${listed(Object.keys(r.passes))}`, `the same route, timed to pass ${passed(r.passes)}`],
+};
 const by = visitors[data.visitors.find((v) => Math.abs(v.vinf - m.speed) < 1).tag];
-id("verdict").innerHTML = `<thead><tr><th></th><th>Flybys</th><th>Route</th><th>Together</th></tr></thead>
-<tbody class="visitor">${data.visitors.map((v) => `<tr><th><label for="v${v.tag}">${v.tag} ${v.short}</label></th>${cells({ flybys: v.visit, route: v.route.bits, together: v.together }, true)}</tr>`).join("")}</tbody>
+id("verdict").innerHTML = `<thead><tr><th></th><th>Planets</th><th>Route</th><th>Together</th></tr></thead>
+<tbody class="visitor">${data.visitors.map((v) => `<tr><th><label for="v${v.tag}">${v.tag} ${v.short}</label></th>${cells({ planets: v.planets.bits, route: v.route.bits, together: v.together }, true)}</tr>`).join("")}</tbody>
 <tbody class="planned"><tr><th colspan="4">Simulated missions at ${by.short}'s speed, ${fmt(m.speed)} km/s</th></tr>
-${m.rows.map((r) => `<tr><th>${mission[r.kind]}</th>${cells(r)}</tr>`).join("")}</tbody>
+${m.rows.map((r) => { const [name, detail] = mission[r.kind](r); return `<tr><th title="${detail}">${name}</th>${cells(r)}</tr>`; }).join("")}</tbody>
 <tfoot><tr><td></td>${`<td>${[[1, "coin flip"], [10, "1 in 1,000"], [19.3, "royal flush"]].map(([at, text]) => `<span style="--at: ${at}">${text}</span>`).join("")}</td>`.repeat(3)}</tr></tfoot>`;
 document.querySelector(`#v${data.visitors.at(-1).tag}`).checked = true;
 id("now").value = NOW;

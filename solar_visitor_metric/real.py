@@ -2,9 +2,7 @@
 
 Orbits come from JPL SBDB (osculating heliocentric ecliptic elements); planets from JPL Horizons via REBOUND, cached in data/. Units: AU, day.
 
-Visit score: for each planet, the actual closest approach d, and p = the fraction of the planet's orbital phase (its real orbit, phase shifted uniformly) that would have brought it at least this close to the visitor's actual path. Combined across the 8 planets with `order_bits`.
-
-Assist: the visitor is traced back to 60 yr before perihelion, then flown forward in three universes (see `assist`), separating the planets' direct pull from the Sun's reflex wobble, which shifts every visitor's perihelion slightly and is not something a trajectory could "use". Non-gravitational accelerations are ignored.
+Planet passes are scored by `planets` on the visitor's two-body hyperbola from these elements; the N-body path here is drawn by the site, and its asymptotes feed the route. Non-gravitational accelerations are ignored.
 """
 import json
 import math
@@ -13,7 +11,7 @@ import os
 import numpy as np
 import rebound
 
-from .scores import order_bits
+from . import planets
 
 HORIZONS_IDS = ["10", "199", "299", "399", "499", "5", "6", "7", "8"]
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -82,78 +80,6 @@ def _helio(sim):
 	return np.array([[p.x, p.y, p.z] for p in ps]) - s, \
 		np.array([[p.vx, p.vy, p.vz] for p in ps]) - np.array([ps[0].vx, ps[0].vy, ps[0].vz])
 
-
-def track(tag, years=12.0, dt=0.1):
-	"""Heliocentric positions of planets and visitor on a uniform grid."""
-	sim, el = build(tag)
-	t0 = el["tp"]
-	times = np.arange(t0 - years * 365.25, t0 + years * 365.25, dt)
-	out = np.empty((len(times), len(HORIZONS_IDS) + 1, 3))
-	vel = np.empty_like(out)
-	# backwards from epoch, then forwards
-	back = times[times <= sim.t][::-1]
-	fwd = times[times > sim.t]
-	state = sim.copy()
-	for seq, s in ((back, sim), (fwd, state)):
-		for t in seq:
-			s.integrate(t, exact_finish_time=1)
-			k = int(round((t - times[0]) / dt))
-			out[k], vel[k] = _helio(s)
-	return times, out, vel, el
-
-
-def closest(times, pos, vel):
-	"""Per planet: (d_min AU, time JD, relative speed AU/day)."""
-	iso = pos[:, -1]
-	res = []
-	for j in range(1, len(HORIZONS_IDS)):
-		d = np.linalg.norm(iso - pos[:, j], axis=1)
-		k = int(np.argmin(d))
-		res.append((float(d[k]), float(times[k]),
-					float(np.linalg.norm(vel[k, -1] - vel[k, j]))))
-	return res
-
-
-def kepler_positions(sim_el, M_offsets, times, t_ref, mu):
-	"""Positions of a Keplerian orbit for many mean-anomaly offsets."""
-	a, e, inc, Om, om, M0 = sim_el
-	n = math.sqrt(mu / a ** 3)
-	M = M0 + M_offsets[:, None] + n * (times[None, :] - t_ref)
-	E = M.copy()
-	for _ in range(30):
-		E -= (E - e * np.sin(E) - M) / (1 - e * np.cos(E))
-	x = a * (np.cos(E) - e)
-	y = a * math.sqrt(1 - e * e) * np.sin(E)
-	cO, sO, ci, si, cw, sw = math.cos(Om), math.sin(Om), math.cos(inc), math.sin(inc), \
-		math.cos(om), math.sin(om)
-	X = (cO * cw - sO * sw * ci) * x + (-cO * sw - sO * cw * ci) * y
-	Y = (sO * cw + cO * sw * ci) * x + (-sO * sw + cO * cw * ci) * y
-	Z = (sw * si) * x + (cw * si) * y
-	return np.stack([X, Y, Z], axis=-1)
-
-
-def phase_p(tag, times, pos, vel, j, d_obs, n_phase=20000):
-	"""Fraction of planet j's phase that comes within d_obs of the path."""
-	sim, el = build(tag)
-	o = sim.particles[j].orbit(primary=sim.particles[0])
-	orb = (o.a, o.e, o.inc, o.Omega, o.omega, o.M)
-	iso = pos[:, -1]
-	r = np.linalg.norm(iso, axis=1)
-	q_p, Q_p = o.a * (1 - o.e), o.a * (1 + o.e)
-	sel = (r > q_p - d_obs) & (r < Q_p + d_obs)
-	if not sel.any():
-		return 1.0
-	# time step so the visitor moves << d_obs between samples
-	v_max = float(np.max(np.linalg.norm(vel[sel, -1], axis=1))) + o.n * o.a
-	stride = max(1, int(0.2 * d_obs / (v_max * (times[1] - times[0]))))
-	idx = np.flatnonzero(sel)[::stride]
-	offs = np.linspace(0, 2 * math.pi, n_phase, endpoint=False)
-	hit = np.zeros(n_phase, bool)
-	for chunk in np.array_split(idx, max(1, len(idx) // 200)):
-		P = kepler_positions(orb, offs, times[chunk], sim.t, sim.G)
-		dmin = np.linalg.norm(P - iso[chunk][None, :, :], axis=-1).min(axis=1)
-		hit |= dmin <= d_obs
-	return max(hit.mean(), 1 / n_phase)
 
 
 OBLIQUITY = math.radians(23.4392911)
@@ -256,58 +182,13 @@ def _outbound(s):
 	return vinf * (math.cos(f_inf) * ph + math.sin(f_inf) * qh)
 
 
-def _cancel_direct(simp):
-	"""Additional force removing the planets' pull on the visitor."""
-	s = simp.contents
-	ps = s.particles
-	v = ps[s.N - 1]
-	G = s.G
-	for k in range(1, len(HORIZONS_IDS)):
-		pk = ps[k]
-		dx, dy, dz = pk.x - v.x, pk.y - v.y, pk.z - v.z
-		r3 = (dx * dx + dy * dy + dz * dz) ** 1.5
-		f = G * pk.m / r3
-		v.ax -= f * dx
-		v.ay -= f * dy
-		v.az -= f * dz
-
-
-def assist(tag, years_back=60.0):
-	"""Planets' change to the outbound asymptote, split into parts.
-
-	Three universes from the same state 60 yr before perihelion: real; real but with the planets' direct pull on the visitor canceled (the Sun still wobbles); and Sun-only (all mass at the barycenter). Returns (total, direct, reflex) as fractions of v_inf, and v_inf (AU/day).
-	"""
-	sim, el = build(tag)
-	sim.integrate(el["tp"] - years_back * 365.25)
-	t_end = el["tp"] + years_back * 365.25
-	outs = {}
-	for mode in ("real", "no_direct", "sun_only"):
-		s = sim.copy()
-		if mode == "no_direct":
-			s.additional_forces = _cancel_direct
-			s.force_is_velocity_dependent = 0
-		if mode == "sun_only":
-			# one body of the total mass at the barycenter (else the Sun drifts off its wobble and shifts the perihelion)
-			com = s.com(last=len(HORIZONS_IDS))
-			sun = s.particles[0]
-			sun.m = com.m
-			sun.x, sun.y, sun.z = com.x, com.y, com.z
-			sun.vx, sun.vy, sun.vz = com.vx, com.vy, com.vz
-			for k in range(1, len(HORIZONS_IDS)):
-				s.particles[k].m = 0.0
-		s.integrate(t_end)
-		outs[mode] = _outbound(s)
-	v0 = float(np.linalg.norm(outs["sun_only"]))
-	frac = lambda a, b: float(np.linalg.norm(outs[a] - outs[b]) / v0)
-	return {"total": frac("real", "sun_only"), "direct": frac("real", "no_direct"),
-			"reflex": frac("no_direct", "sun_only")}, v0
-
-
-def score(tag):
-	times, pos, vel, el = track(tag)
-	close = closest(times, pos, vel)
-	ps = [phase_p(tag, times, pos, vel, j, d) for j, (d, _, _) in enumerate(close, start=1)]
-	a, vinf = assist(tag)
-	return {"name": el["name"], "close": close, "p": ps, "visit_bits": order_bits(ps),
-			"assist": a, "v_inf_kms": vinf * 1.495978707e8 / 86400, "times": times,
-			"pos": pos}
+def score(tag, mapper=map):
+	"""The visitor's passes of the eight planets and their score against the planet null at its speed and perihelion distance."""
+	el = elements(tag)
+	orbits = planets.Orbits.at(planets_at(el["epoch"]), el["epoch"])
+	v = math.sqrt(planets.MU / abs(el["a"]))
+	R = planets.rotation(*(np.array([math.radians(el[k])]) for k in ("i", "om", "w")))
+	d, t = planets.passes(el["q"], v, R, np.array([el["tp"]]), orbits)
+	null = planets.Null(el["q"], v, orbits, mapper)
+	return {"name": el["name"], "short": el["short"], "v_inf_kms": v * AU_DAY_KMS, "q": el["q"], "tp": el["tp"],
+			"d": d[0], "jd": t[0], "p": null.p(d[0])[0], "bits": null.bits(d[0])}
