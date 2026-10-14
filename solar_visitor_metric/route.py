@@ -12,7 +12,7 @@ for small g (the cone's cross-section projected onto the sphere, over its area);
 
 Candidates are the stars a visitor at v_inf could meet within HOP of the Sun: the hop is where the meeting happens, not where the star is today, so a star 60 pc away now that crossed 10 pc from the Sun when the visitor passed is a short hop. A field is complete for visitors at least as fast as its v_floor: a star met at hop L after time L / v_inf is now at most L (1 + |w| / v_inf) away, so it is enough to hold every star within HOP (1 + |w| / v_floor) of the Sun today.
 
-Look-elsewhere uses a weighted Bonferroni over the candidates with weights falling as 1/rank by hop, encoding a planner's preference for short hops: score = min_k p_k / w_k, so the nearest reachable stars are cheap to "try".
+Look-elsewhere uses a weighted Bonferroni over the candidates with weights falling as hop^-4, hops under NEAR counted as NEAR: score = min_k p_k / w_k. With stars spread evenly the number met at hop L grows as L^2 dL, so each doubling of hop distance gets half the total share of the one before, a traveler who favors near stops; nearly equal hops get nearly equal weight, and no one star met near the Sun takes the budget.
 
 The route is scored as one itinerary, origin, Sun, destination: the arrival end against an isotropic null (`end_score`), the departure end given the arrival (`turn_score`), where the only freedom left is how the Sun's turn is oriented. The two p's are then independent by construction and combine exactly; scored separately, a pair of stars on one line through the Sun would count twice.
 """
@@ -37,6 +37,8 @@ HOP = 20.0           # pc from the Sun: the longest hop counted at either end
 V_FLOOR = 20.0       # km/s: fields are complete for visitors at least this fast
 R_MAX = 200.0        # pc: completeness cap, missing only stars faster than 180 km/s
 TOL = 0.5            # pc: stars a visitor can pass this close count as reachable
+FALLOFF = 4.0        # look-elsewhere weight falls as hop^-FALLOFF...
+NEAR = 2.0           # ...with hops under NEAR pc counted as NEAR
 MATCH = 2.0          # arcsec at the Gaia epoch: a Hipparcos star this close to a usable Gaia star is that star
 GAIA_YEAR = 2016.0
 HIPPARCOS_YEAR = 1991.25
@@ -236,16 +238,13 @@ def hops(field, v_inf, sign):
 
 
 def end_weights(field, v_inf, sign):
-	"""Look-elsewhere weights for one end: 1/rank by hop among stars met within HOP.
+	"""Look-elsewhere weights for one end: hop^-FALLOFF among stars met within HOP, hops under NEAR counted as NEAR.
 
-	Depends only on v_inf, so the test stays valid while the budget is not wasted on impossible stars; the field must be complete at this speed.
+	Half the share per doubling of hop (see the module docstring). Without the floor the one or two stars met nearest the Sun take most of the budget; shallower falloffs spread it over the thousands the catalog cannot place. FALLOFF and NEAR are the pair that detects planted routes best (falloff_check.py). Depends only on v_inf, so the test stays valid; the field must be complete at this speed.
 	"""
 	assert v_inf >= V_FLOOR, f"field is complete only for v_inf >= {V_FLOOR} km/s"
 	L = hops(field, v_inf, sign)
-	ok = L <= HOP
-	rank = np.empty(len(L))
-	rank[np.argsort(L)] = np.arange(1, len(L) + 1)
-	w = np.where(ok, 1 / rank, 0.0)
+	w = np.where(L <= HOP, np.maximum(L, NEAR) ** -FALLOFF, 0.0)
 	return w / w.sum()
 
 
@@ -533,6 +532,7 @@ def planted_bits(V_in, V_out, field, errors, draws=31, seed=0):
 		p_out, _, _ = turn_score(field, V_in, V_out, errors, rng)
 		rows.append((p_in, p_out, combine(p_in, p_out)))
 	return np.median(-np.log2(np.maximum(rows, 1e-300)), axis=0)
+
 
 def kinematic_directions(field, v_inf, width=0.15):
 	"""Directions of motion of the field's stars whose speed relative to the Sun is within `width` of v_inf: the arrivals interstellar objects make if, natural or not, they move as stars do. A field's reach depends on speed alone, so within the band the directions are unbiased."""
