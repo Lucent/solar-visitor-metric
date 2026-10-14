@@ -299,7 +299,7 @@ function within(a, b, R) {
 
 function zoomed() {
 	const v = visitor();
-	form.radius.value = form.linear.checked ? "to scale throughout" : `to scale within ${extent(r0())}, logarithmic beyond`;
+	form.radius.value = form.linear.checked ? "to scale throughout" : `to scale within ${extent(r0())}`;
 	shells.forEach((ball) => ball.scale.setScalar(scale(ball.userData.R)));
 	orbits.forEach((loop) => place(loop.geometry, loop.userData.xyz));
 	route = new Float32Array(v.path.length);
@@ -436,19 +436,25 @@ new ResizeObserver(([{ contentRect: { width, height } }]) => {
 const chance = (p) => p >= 0.01 ? `${Math.round(100 * p)} in 100` : p > 1e-6 ? `1 in ${fmt(1 / p)}` : `1 in ${fmt(1e-6 / p)} million`;
 const REPO = "https://github.com/lucent/solar-visitor-metric";
 // A score's method is a reference, as a citation is: a superscript after its name.
-const method = (part) => `<sup><a href="${REPO}#:~:text=${encodeURIComponent(part)}">how</a></sup>`;
+const method = (part) => `<sup><a href="${REPO}#:~:text=${encodeURIComponent(part)}">method</a></sup>`;
 // A star goes by its SIMBAD name where it has one, its catalog designation otherwise; the link opens it in SIMBAD.
 const named = (i) => data.stars.names[i] || data.stars.ids[i];
 const simbad = (i) => `https://simbad.cds.unistra.fr/simbad/sim-id?Ident=${encodeURIComponent(data.stars.ids[i])}`;
-const star = (i) => `<a href="${simbad(i)}" title="${data.stars.ids[i]}">${named(i)}</a>`;
+// a star a reader knows by name opens its encyclopedia article; the rest, their catalog record
+const wiki = (title) => `https://en.wikipedia.org/wiki/Special:Search?go=Go&search=${encodeURIComponent(title)}`;
+const star = (i) => `<a href="${data.stars.names[i] ? wiki(data.stars.names[i]) : simbad(i)}" title="${data.stars.ids[i]}">${named(i)}</a>`;
+const term = (title, text) => `<a href="https://en.wikipedia.org/wiki/${title}">${text}</a>`;
 const best = (v) => Math.max(v.planets.bits, v.route.bits);
+
+// A chance in words, colored as its badge is: ink for chance, violet as the bits climb.
+const odds = (b, p = 2 ** -b) => `<data class="odds" value="${p}" style="--bits: ${b}">${chance(p)}</data>`;
 
 function bits(b) {
 	return `<data class="bits" value="${b}" style="--bits: ${b}"><b>${fmt(b)}</b> bits</data>`;
 }
 
 function stop(s) {
-	return `<tr style="--bits: ${s.bits}"><th>${star(s.i)}</th><td>${fmt(s.miss)} ± ${fmt(s.sigma)} pc</td><td>${fmt(s.hop)} pc</td><td><button type="button" value="${s.jd}">${when(s.jd)}</button></td></tr>`;
+	return `<tr style="--bits: ${s.bits}"><th>${star(s.i)}</th><td title="${fmt(s.miss)} ± ${fmt(s.sigma)} pc">${fmt(s.aim)}° ± ${fmt(s.blur)}°</td><td>${fmt(s.hop)} pc</td><td><button type="button" value="${s.jd}">${when(s.jd)}</button></td></tr>`;
 }
 
 // The trace that came closest to looking planned, in words.
@@ -456,33 +462,34 @@ function closest(v) {
 	if (best(v) == 0)
 		return "Neither trace: every random arrival at its speed does as well.";
 	const [kind, b] = v.planets.bits >= v.route.bits ? ["planet passes", v.planets.bits] : ["route", v.route.bits];
-	return `Closest to planned: its ${kind}, ${fmt(b)} bits. ${chance(2 ** -b)} random arrivals do as well.`;
+	return `Closest to planned: its ${kind}, ${fmt(b)} bits. ${odds(b)} random arrivals do as well.`;
 }
 
 function panel(v) {
 	const plan = v.route.planned;
 	return `<input type="radio" name="visitor" form="controls" id="v${v.tag}" value="${v.tag}"><label for="v${v.tag}" class="visitor"><b>${v.tag}</b>${v.short}${bits(best(v))}</label>
 <article class="visitor">
-<h2><a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${v.tag}">${v.name}</a></h2>
+<h2><span><a href="${wiki(`${v.tag}/${v.short}`)}">${v.name}</a><sup><a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=${v.tag}">orbit</a></sup></span></h2>
 <p class="lead">${closest(v)}</p>
-<p>${fmt(v.vinf, 3)} km/s far out · perihelion ${fmt(v.q, 3)} AU · <button type="button" value="${v.tp}">${when(v.tp)}</button></p>
+<p>${term("Hyperbolic_trajectory#Hyperbolic_excess_velocity", "speed far from the Sun")} ${fmt(v.vinf, 3)} km/s · ${term("Apsis", "perihelion")} ${fmt(v.q, 3)} ${term("Astronomical_unit", "AU")} · <button type="button" value="${v.tp}">${when(v.tp)}</button></p>
 <h2><span>Planets${method("Planets. A visitor")}</span>${bits(v.planets.bits)}</h2>
-<p class="lead">${chance(2 ** -v.planets.bits)} random arrivals pass the planets as closely.</p>
-<p>Random arrivals keep its speed and perihelion but take any direction and any time. So lying in the ecliptic counts, and so does meeting several planets. The score is the chance of its three closest passes together.</p>
+<p class="lead">${odds(v.planets.bits)} random arrivals pass the planets as closely.</p>
+<p>Random arrivals keep its speed and perihelion but take any direction and any time. So lying in the ${term("Ecliptic", "ecliptic")} counts, and so does meeting several planets. The score is the chance of its three closest passes together.</p>
 <h3>Planet passes</h3>
 <table class="planets">
 <thead><tr><th></th><th>closest</th><th>planet radii</th><th>date</th><th>chance</th></tr></thead>
 ${v.planets.passes.map((p) => `<tr style="--bits: ${-Math.log2(p.p)}"><th>${p.name}</th><td>${fmt(p.d)} AU</td><td>${Math.round(p.radii).toLocaleString()}</td><td><button type="button" value="${p.jd}">${when(p.jd)}</button></td><td>${pct(p.p)}</td></tr>`).join("\n")}
 </table>
 <h2><span>Route${method("Route. Inbound and outbound")}</span>${bits(v.route.bits)}</h2>
-<p class="lead">${chance(v.route.beaten)} random arrivals pass nearby stars as closely before and after the Sun.</p>
+<p class="lead">${odds(v.route.bits, v.route.beaten)} random arrivals pass nearby stars as closely before and after the Sun.</p>
 <p>A route planned at this speed from the nearest star it can reach, ${star(plan.origin)}, to the next, ${star(plan.destination)}, scores ${fmt(plan.bits)} bits on the same catalog.</p>
-<p>Reachable stars are those it could meet within 20 pc of the Sun; the destination is scored given the origin and the observed ${fmt(v.route.turn)}° turn at the Sun. Gaia radial velocities count only when reliable: <a href="${REPO}#:~:text=${encodeURIComponent("A mismeasured star")}">a mismeasured one</a> once gave ʻOumuamua a false origin.</p>
-${["origin", "destination"].map((end) => `<h3><span>${end} <small title="reachable stars">${v.route[end].candidates.toLocaleString()}</small></span>${bits(v.route[end].stars[0].bits)}</h3>
+<p>It could meet any of these ${term("Gaia_(spacecraft)", "Gaia")} and ${term("Hipparcos", "Hipparcos")} stars within 20 ${term("Parsec", "pc")} of the Sun. Nearer meetings count more. The destination is scored given the arrival and the Sun's ${fmt(v.route.turn)}° turn. Gaia velocities count only at reliable signal-to-noise.</p>
+${["origin", "destination"].map((end) => `<h3 class="${end}"><span>${end} <small title="reachable stars">${v.route[end].candidates.toLocaleString()}</small></span>${bits(v.route[end].stars[0].bits)}</h3>
 <table class="${end}">
-<thead><tr><th>best of the reachable</th><th>missed by</th><th>from Sun</th><th>date</th></tr></thead>
+<thead><tr><th>star</th><th>aim off by</th><th>met at</th><th>date</th></tr></thead>
 ${v.route[end].stars.map(stop).join("")}
-</table>`).join("\n")}
+</table>${end === "origin" && v.searches.length ? `
+<p>Searches for its birthplace: ${v.searches.map(([cite, url]) => `<a href="${url}">${cite}</a>`).join(", ")}.</p>` : ""}`).join("\n")}
 </article>`;
 }
 
@@ -502,7 +509,7 @@ const mission = {
 	both: (r) => [`Both, past ${listed(Object.keys(r.passes))}`, `the same route, timed to pass ${passed(r.passes)}`],
 };
 const by = visitors[data.visitors.find((v) => Math.abs(v.vinf - m.speed) < 1).tag];
-id("verdict").innerHTML = `<thead><tr><th></th><th>Planets</th><th>Route</th><th>Together</th></tr></thead>
+id("verdict").innerHTML = `<thead><tr><th></th><th>Planets</th><th>Route</th><th title="planets and route scored as one test">Together</th></tr></thead>
 <tbody class="visitor">${data.visitors.map((v) => `<tr><th><label for="v${v.tag}">${v.tag} ${v.short}</label></th>${cells({ planets: v.planets.bits, route: v.route.bits, together: v.together }, true)}</tr>`).join("")}</tbody>
 <tbody class="planned"><tr><th colspan="4">Simulated missions at ${by.short}'s speed, ${fmt(m.speed)} km/s</th></tr>
 ${m.rows.map((r) => { const [name, detail] = mission[r.kind](r); return `<tr><th title="${detail}">${name}</th>${cells(r)}</tr>`; }).join("")}</tbody>
@@ -510,15 +517,10 @@ ${m.rows.map((r) => { const [name, detail] = mission[r.kind](r); return `<tr><th
 document.querySelector(`#v${data.visitors.at(-1).tag}`).checked = true;
 id("now").value = NOW;
 
-// The time ruler: decades marked where they fall on the slider, under a band as thick as the log of the time each step covers, so the ends visibly race and the middle crawls.
+// The time ruler: decades marked where they fall on the slider; the even spacing of years that differ a hundredfold shows the slider's logarithmic time. A narrow ruler drops the minor marks first, then the mid ones.
 const tick = (days) => (Math.asinh(days / data.time.tau) / SPAN + 1) / 2;
-const band = (u) => Math.log(data.time.tau * SPAN * Math.cosh(u * SPAN));
-const thin = band(0);
-const thick = band(1);
-const profile = Array.from({ length: 41 }, (_, k) => k / 20 - 1).map((u) => [(u + 1) * 50, 50 * (band(u) - thin * 0.6) / (thick - thin * 0.6)]);
-id("ruler").style.setProperty("--band", `polygon(${[...profile.map(([x, h]) => `${x}% ${50 - h}%`), ...profile.toReversed().map(([x, h]) => `${x}% ${50 + h}%`)].join(", ")})`);
-id("ruler").insertAdjacentHTML("beforeend", [[-1e6, "−1 Myr"], [-1e4, "−10 kyr"], [-100, "−100 yr"], [-1, "−1 yr"], [0, "perihelion"], [1, "+1 yr"], [100, "+100 yr"], [1e4, "+10 kyr"], [1e6, "+1 Myr"]]
-	.map(([years, text]) => `<span style="--at: ${tick(years * 365.25)}">${text}</span>`).join(""));
+id("ruler").insertAdjacentHTML("beforeend", [[-1e6, "−1 Myr", ""], [-1e4, "−10 kyr", "minor"], [-100, "−100 yr", "mid"], [-1, "−1 yr", "minor"], [0, "Perihelion", "perihelion"], [1, "+1 yr", "minor"], [100, "+100 yr", "mid"], [1e4, "+10 kyr", "minor"], [1e6, "+1 Myr", ""]]
+	.map(([years, text, level]) => `<span${level ? ` class="${level}"` : ""} style="--at: ${tick(years * 365.25)}">${text}</span>`).join(""));
 
 // --- input -----------------------------------------------------------------
 

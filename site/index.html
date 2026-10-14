@@ -134,7 +134,7 @@ header p {
 header strong {
 	color: var(--ink);
 }
-/* Flybys, route and together side by side, each cell its own 25-bit track: the bar lies behind the number, as in Ptree's tiles, so the visitors' rows stay bare and the missions' run violet. */
+/* Planets, route and together side by side, each cell its own 25-bit track: the bar lies behind the number, as in Ptree's tiles, so the visitors' rows stay bare and the missions' run violet. */
 #verdict {
 	--columns: minmax(0, 1.25fr) repeat(3, minmax(0, 1fr));
 	column-gap: 0.5rem;
@@ -192,8 +192,7 @@ a {
 	color: var(--s1);
 }
 #scene {
-	position: relative;
-	block-size: min(85svh, 60rem);
+	block-size: var(--scene);
 	contain: size;
 }
 #scene > * {
@@ -334,21 +333,34 @@ a {
 #tip:empty {
 	display: none;
 }
+/* The controls are one card: transport and time above, the view's frame below a rule. */
 form {
-	display: flex;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
 	align-items: center;
-	gap: 0.5rem 1rem;
-	padding: 0.6rem 1.5rem;
+	gap: 0.8rem 1.5rem;
+	margin: 0.6rem 1.5rem 0;
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--grid);
+	border-radius: 0.75rem;
+	background: var(--plane);
+}
+#controls input[type=range] {
+	margin: 0;
+	accent-color: var(--s1);
+}
+.transport {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
 }
 /* Play is the page's one big control: a round button at the head of time, a triangle that becomes two bars while the visitor travels. It is still the checkbox, the state the code reads. */
 [name=play] {
 	appearance: none;
 	display: grid;
 	place-items: center;
-	flex: none;
-	inline-size: 3rem;
-	block-size: 3rem;
+	inline-size: 3.25rem;
+	block-size: 3.25rem;
 	margin: 0;
 	border-radius: 50%;
 	background: var(--s1);
@@ -364,8 +376,8 @@ form {
 }
 [name=play]::before {
 	content: "";
-	inline-size: 1.1rem;
-	block-size: 1.2rem;
+	inline-size: 1.15rem;
+	block-size: 1.25rem;
 	translate: 0.12rem;
 	background: var(--plane);
 	clip-path: polygon(0 0, 100% 50%, 0 100%);
@@ -375,58 +387,139 @@ form {
 	background: linear-gradient(to right, var(--plane) 0 35%, transparent 35% 65%, var(--plane) 65%);
 	clip-path: none;
 }
+#now {
+	padding: 0.45rem 0.9rem;
+	border: 1px solid var(--s1);
+	border-radius: 0.5rem;
+	background: none;
+	color: var(--s1);
+	font: inherit;
+	cursor: pointer;
+}
 #time {
-	flex: 1 1 16rem;
+	container: time / inline-size;
 	display: grid;
+	gap: 0.15rem;
 }
-#time input {
-	margin: 0;
-}
-/* Thumb-width inset, so the ruler's ends sit under the thumb's travel. */
-#ruler {
-	position: relative;
-	block-size: 1.6rem;
-	margin-inline: 0.5rem;
-	font-size: 0.7rem;
-	color: var(--muted);
-}
-#ruler::before {
-	content: "";
-	position: absolute;
-	inset: 0 0 auto;
-	block-size: 0.5rem;
-	background: var(--grid);
-	clip-path: var(--band);
-}
-#ruler span {
-	position: absolute;
-	inset-block-start: 0.55rem;
-	inset-inline-start: calc(var(--at) * 100%);
-	translate: -50%;
+/* A readout takes its group's width and gives none, as Ptree's footer attribution does, so text changing length moves nothing. */
+#controls output {
+	contain: inline-size;
 	white-space: nowrap;
-}
-output {
 	font-variant-numeric: tabular-nums;
 }
 [name=date] {
-	min-inline-size: 12rem;
-	font-weight: 600;
+	font-size: 1.35rem;
+	font-weight: 700;
 }
-/* Time on the left, the view on the right. */
-label:has([name=zoom]) {
-	margin-inline-start: auto;
+/* each mark a tick above its label, placed along the thumb's travel, half the native thumb in from each end */
+#ruler {
+	--inset: 8px;
+	position: relative;
+	block-size: 1.6rem;
+	font-size: 0.75rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--muted);
+}
+#ruler span {
+	position: absolute;
+	inset-block-start: 0.5rem;
+	inset-inline-start: calc(var(--inset) + var(--at) * (100% - 2 * var(--inset)));
+	translate: -50%;
+	white-space: nowrap;
+}
+#ruler span::before {
+	content: "";
+	position: absolute;
+	inset-block-end: 100%;
+	inset-inline-start: 50%;
+	block-size: 0.35rem;
+	border-inline-start: 1px solid currentColor;
+}
+#ruler .perihelion {
+	font-weight: 700;
+	color: var(--ink);
+}
+/* a narrower ruler drops alternate marks, so those left stay evenly spaced */
+@container time (width < 30rem) {
+	#ruler .minor {
+		display: none;
+	}
+}
+@container time (width < 16rem) {
+	#ruler .mid {
+		display: none;
+	}
+}
+/* Zoom and Scale share the row in halves while they fit, each on its own line when they don't; their words share a baseline whatever sits under them. */
+#frame {
+	grid-column: 1 / -1;
+	container: frame / inline-size;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: first baseline;
+	gap: 0.6rem 1.5rem;
+	padding-block-start: 0.8rem;
+	border-block-start: 1px solid var(--grid);
+}
+#frame > * {
+	flex: 1 1 14rem;
+	box-sizing: border-box;
+}
+#frame label, #scale b {
+	font-weight: 700;
+}
+#frame > label {
+	display: flex;
+	align-items: center;
+	gap: 0.75em;
+}
+#frame > label input {
+	flex: 1;
+	min-inline-size: 0;
+}
+/* the word, the checkbox and its text in one grid, so the readout starts under "Linear", not under the box */
+#scale {
+	display: grid;
+	grid-template-columns: auto auto 1fr;
+	align-items: baseline;
+	gap: 0.15rem 0.5em;
+}
+#scale b {
+	margin-inline-end: 0.5em;
+}
+/* the rule between the halves exists only while they sit side by side: two 14rem halves and the 1.5rem gap */
+@container frame (width >= 29.5rem) {
+	#scale {
+		padding-inline-start: 1.5rem;
+		border-inline-start: 1px solid var(--grid);
+	}
+}
+#scale label {
+	display: contents;
+	font-weight: normal;
+}
+#scale input {
+	margin: 0;
 }
 [name=radius] {
+	grid-column: 3;
 	font-size: 0.8rem;
 	color: var(--muted);
 }
-aside {
-	/* The view, its controls and the footer set the height; the panel contributes none, takes theirs, and scrolls within it. */
-	grid-row: 2 / span 3;
-	grid-column: 2;
+/* The page is the one scroller: the panel runs its full length, and the view with its controls stays pinned beside it. An inner scroller would have to pass its scroll on to the page, which Chrome stops doing while a WebGL canvas beside it animates. */
+#view {
+	--scene: min(85svh, 60rem);
 	align-self: stretch;
-	contain: size;
-	overflow: auto;
+}
+/* pinned within the view's own cell, so they stop where the panel ends rather than sliding over the footer */
+#scene, #view > form {
+	position: sticky;
+	inset-block-start: 0;
+}
+#view > form {
+	inset-block-start: var(--scene);
+}
+aside {
 	display: flex;
 	flex-wrap: wrap;
 	align-content: start;
@@ -487,7 +580,7 @@ h2 {
 	font-size: 1.05rem;
 }
 /* Labels of parts and columns are small capitals in gray, as Ptree heads its columns: they say where you are and step back. */
-h3, thead th, #verdict th[colspan] {
+h3, thead th, #verdict th[colspan], .caption {
 	font-size: 0.7rem;
 	font-weight: 700;
 	letter-spacing: 0.08em;
@@ -545,6 +638,18 @@ h2:first-child {
 	white-space: nowrap;
 	color: var(--plane);
 }
+/* The same surprise in words: a chance figure takes its badge's color, so only what is surprising glows, and the page's one finding is violet. */
+.odds {
+	color: color-mix(in oklch, var(--heat) calc(min(var(--bits), 10) * 10%), var(--ink));
+	font-variant-numeric: tabular-nums;
+}
+.found {
+	color: var(--heat);
+}
+/* the ends of a route are named in their colors in the scene */
+h3:is(.origin, .destination) {
+	color: var(--tint);
+}
 .bits b {
 	font-size: 1.4rem;
 	letter-spacing: -0.01em;
@@ -563,7 +668,7 @@ article .lead {
 	font-weight: 600;
 	color: var(--ink);
 }
-button[value] {
+aside button[value] {
 	padding: 0;
 	border: 0;
 	background: none;
@@ -633,7 +738,7 @@ thead th {
 	--columns: minmax(0, 1fr) repeat(3, max-content);
 }
 footer {
-	grid-column: 1;
+	grid-column: 1 / -1;
 	padding: 0 1.5rem 0.8rem;
 	font-size: 0.85rem;
 	color: var(--muted);
@@ -642,13 +747,15 @@ footer {
 	body {
 		grid-template: none;
 	}
-	#scene {
-		block-size: 70svh;
+	#view {
+		--scene: 70svh;
 	}
-	aside {
-		grid-row: auto;
-		grid-column: auto;
-		contain: none;
+	/* stacked, nothing pins; the scene stays the frame its overlays are placed in */
+	#scene {
+		position: relative;
+	}
+	#view > form {
+		position: static;
 	}
 }
   </style>
@@ -656,10 +763,11 @@ footer {
  <body>
 <header>
 <input type="checkbox" id="dark"><label for="dark" title="Toggle light / dark theme" aria-label="Toggle light / dark theme"><svg viewBox="-50 -50 100 100" aria-hidden="true"><defs><mask id="Moon"><rect x="-50" y="-50" width="100" height="100" fill="#fff"/><circle cx="40" cy="-15" r="45" fill="#000"/></mask></defs><circle cx="10" cy="0" r="45" mask="url(#Moon)" fill="currentColor"/></svg></label>
-<h1>Are interstellar visitors alien probes?</h1>
-<p>Three objects from other stars have crossed the solar system since 2017. A mission would leave traces that chance rarely does: <b>flybys</b> close enough to the planets to borrow their gravity, and a <b>route</b> from one star to another with the Sun as a stop between. Both are scored against random arrivals at the same speed, in bits: each bit halves the odds, so 10 bits is 1 in 1,000. Together scores the two as one test, which costs a little for having looked in two places. <strong>None of the three left either trace.</strong></p>
+<h1>Are interstellar visitors <a href="https://en.wikipedia.org/wiki/Bracewell_probe">alien probes</a>?</h1>
+<p>Three <a href="https://en.wikipedia.org/wiki/Interstellar_object">objects from other stars</a> have crossed the solar system since 2017. A probe would give itself away by passing close to several <b>planets</b> on one trip, or by flying a <b>route</b> between stars as a <a href="https://en.wikipedia.org/wiki/Self-replicating_spacecraft">self-replicating probe</a> would. Like a <a href="https://en.wikipedia.org/wiki/Traveling_salesman_problem">traveling salesman</a>, it would favor the nearest next stop. Each trace is scored in <a href="https://en.wikipedia.org/wiki/Information_content">bits of surprise</a> against a <a href="https://en.wikipedia.org/wiki/Null_hypothesis">null hypothesis</a> of random arrivals at the same speed. Each bit halves the odds: 10 bits is 1 in 1,000. <strong>1I and 2I left neither trace. <span class="found">3I passed three planets more closely than chance usually allows</span>, but came from no star and is heading for none.</strong></p>
 <table id="verdict"></table>
 </header>
+<div id="view">
 <section id="scene" aria-label="The selected visitor's path among the planets and nearby stars"><div id="tip"></div>
 <button type="button" id="fit" title="Fit to view" aria-label="Fit to view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/><path d="M9 7l3-3 3 3M9 17l3 3 3-3M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg></button>
 <svg id="compass" viewBox="-1 -1 2 2" aria-hidden="true"><path class="far"/><path class="near"/><path class="north"/><text>N</text><g class="center"><circle r="0.06"/><text y="-0.16">Galactic center</text></g></svg>
@@ -673,14 +781,11 @@ footer {
 </ul>
 </section>
 <form id="controls">
-<input type="checkbox" name="play" aria-label="Play">
-<button type="button" id="now">Now</button>
-<span id="time"><input type="range" name="u" min="-1" max="1" step="0.0002" aria-label="Time"><span id="ruler" aria-hidden="true"></span></span>
-<output name="date"></output>
-<label>Zoom <input type="range" name="zoom" min="-2" max="6.5" step="0.01" value="0.8"></label>
-<label><input type="checkbox" name="linear"> Linear</label>
-<output name="radius"></output>
+<div class="transport"><input type="checkbox" name="play" aria-label="Play"><button type="button" id="now">Now</button></div>
+<div id="time"><span class="caption">Simulation time</span><output name="date"></output><input type="range" name="u" min="-1" max="1" step="0.0002" aria-label="Time"><span id="ruler" aria-hidden="true"></span></div>
+<div id="frame"><label>Zoom <input type="range" name="zoom" min="-2" max="6.5" step="0.01" value="0.8"></label><div id="scale"><b>Scale</b><label><input type="checkbox" name="linear"> Linear distance scale</label><output name="radius"></output></div></div>
 </form>
+</div>
 <aside></aside>
 <footer>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3 and Hipparcos, named by <a href="https://simbad.cds.unistra.fr/">SIMBAD</a>. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</footer>
  </body>
