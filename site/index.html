@@ -737,10 +737,31 @@ thead th {
 :is(.origin, .destination) {
 	--columns: minmax(0, 1fr) repeat(3, max-content);
 }
+/* The maker, then the sources. Logos sit in the line of text, sized and set as ptable.com's Ptree promo sets them: the same "t" height in both wordmarks (Ptable 65.5/121.1, Ptree 86.2/121.1), each lowered by its share below the baseline (Ptable 93.4/121.1, Ptree 109.6/121.1). */
+footer p {
+	margin: 0.3rem 0;
+}
+footer .by {
+	font-size: 1rem;
+	font-weight: 600;
+	color: var(--ink);
+}
+footer .ptree {
+	block-size: 1em;
+	vertical-align: -0.095em;
+}
+footer .ptable {
+	block-size: 1.317em;
+	vertical-align: -0.3em;
+}
+.Dark footer .light, :root:not(.Dark) footer .dark {
+	display: none;
+}
 footer {
 	grid-column: 1 / -1;
-	padding: 0 1.5rem 0.8rem;
-	font-size: 0.85rem;
+	margin: 0.6rem 1.5rem 0;
+	padding: 0.6rem 0 0.8rem;
+	font-size: 0.95rem;
 	color: var(--muted);
 }
 @media (width < 52rem) {
@@ -787,6 +808,9 @@ footer {
 </form>
 </div>
 <aside></aside>
-<footer>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3 and Hipparcos, named by <a href="https://simbad.cds.unistra.fr/">SIMBAD</a>. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</footer>
+<footer>
+<p class="by">From the creator of <a href="https://ptable.com/"><img class="ptable light" src="icon/ptable-logo.svg" alt="Ptable"><img class="ptable dark" src="icon/ptable-logo.svg#inverse" alt="Ptable"></a> and <a href="https://ptree.org/"><img class="ptree light" src="icon/ptree-logo.svg#logo" alt="Ptree"><img class="ptree dark" src="icon/ptree-logo.svg#inverse" alt="Ptree"></a>. <a href="https://github.com/lucent/solar-visitor-metric/fork">Fork it</a> and run the simulation with your own assumptions.</p>
+<p>Planets: <a href="https://github.com/cosinekitty/astronomy">Astronomy Engine</a>. Visitors: JPL Small-Body Database and Horizons. Stars: Gaia DR3 and Hipparcos, named by <a href="https://simbad.cds.unistra.fr/">SIMBAD</a>. Method and code: <a href="https://github.com/lucent/solar-visitor-metric">solar-visitor-metric</a>.</p>
+</footer>
  </body>
 </html>
