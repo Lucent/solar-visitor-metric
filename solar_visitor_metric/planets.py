@@ -165,6 +165,46 @@ class Null:
 		n = len(self.T)
 		return max(0.0, -math.log2(min(1.0, float(beta.ppf(0.95, count + 1, max(n - count, 1))))))
 
+	def segments(self, q, v_inf, orbits, R, d, excess, mapper=map, seed=0):
+		"""Where the bits of closest approaches d come from, as steps that each narrow the null and so add exactly: `bias`, what weighting orientations by `excess` (surveys' finds over random, per TILT_EDGES band) explains; `plane`, lying as close to the ecliptic as the path R does; `direction`, pointing as R does within that tilt; `timing`, arriving when it did on R itself. They sum to `total`, the bits on N_SEGMENT null visitors of their own, which match `bits` within its sampling."""
+		t = float(statistic(self.p(d))[0])
+
+		def sample(limit, fixed, k):
+			chunks = [(q, v_inf, orbits, limit, fixed, min(CHUNK, N_SEGMENT - j), (seed, 2, k, j)) for j in range(0, N_SEGMENT, CHUNK)]
+			out = [(statistic(self.p(x)) <= t, a) for x, a in mapper(_tilted_chunk, chunks)]
+			return np.concatenate([h for h, _ in out]), np.concatenate([a for _, a in out])
+
+		hit, angle = sample(math.pi / 2, None, 0)
+		w = excess[np.minimum(np.digitize(angle, TILT_EDGES) - 1, len(excess) - 1)]
+		p_all, p_bias = hit.mean(), np.sum(w * hit) / np.sum(w)
+		p_band = sample(float(tilt(R)), None, 1)[0].mean()
+		p_time = sample(None, R, 2)[0].mean()
+		return {"bias": math.log2(p_bias / p_all), "plane": math.log2(p_band / p_bias), "direction": math.log2(p_time / p_band),
+				"timing": -math.log2(p_time), "total": -math.log2(p_all)}
+
+
+TILT_EDGES = np.radians([0, 10, 20, 30, 45, 90])   # bands of angle between a path's plane and the ecliptic, for survey bias, each wide enough to hold several of an era's comets
+N_SEGMENT = 2_000_000                                  # null visitors in each step of `Null.segments`
+
+
+def tilt(R):
+	"""Angle between the plane of the path R (..., 3, 3) and the ecliptic, 0 to pi/2: prograde and retrograde alike."""
+	return np.arccos(np.abs(R[..., 2, 2]))
+
+
+def _tilted_chunk(args):
+	"""Null visitors with planes within `limit` of the ecliptic, uniform over the orientations so restricted (pi/2: all), or on the fixed orientation `fixed`; perihelion at a random time. Returns closest approaches and tilts."""
+	q, v_inf, orbits, limit, fixed, m, seed = args
+	rng = np.random.default_rng(seed)
+	if fixed is None:
+		inc = np.arccos(1 - rng.random(m) * (1 - math.cos(limit)))
+		inc = np.where(rng.random(m) < 0.5, inc, math.pi - inc)
+		Rs = rotation(inc, rng.random(m) * 2 * math.pi, rng.random(m) * 2 * math.pi)
+	else:
+		Rs = np.broadcast_to(fixed, (m, 3, 3))
+	tp = orbits.t0 + (rng.random(m) - 0.5) * SPAN
+	return passes(q, v_inf, Rs, tp, orbits)[0], tilt(Rs)
+
 
 def euler(R):
 	"""(inc, Om, om) of a rotation built by `rotation`."""

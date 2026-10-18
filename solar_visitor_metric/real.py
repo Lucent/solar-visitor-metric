@@ -45,6 +45,29 @@ def elements(tag):
 	return el
 
 
+COMETS_URL = "https://ssd-api.jpl.nasa.gov/sbdb_query.api?fields=full_name,e,i,q,first_obs&sb-kind=c&sb-cdata=%7B%22AND%22%3A%5B%22e%7CGT%7C0.9%22%5D%7D"
+ERA = 5   # years either side of a visitor's perihelion whose comet discoveries measure its surveys
+
+
+def survey_excess(year):
+	"""How much more often than random the surveys of a visitor's era found paths at each tilt from the ecliptic: per planets.TILT_EDGES band, the share of long-period comets first seen within ERA years of `year`, over the share random orientations give. Long-period comets arrive from nearly every direction, so what the surveys found shows what they favor. Sungrazers (q < 0.1 AU, found by coronagraphs) and interstellar objects (e > 1.5) are left out. Returns (excess, comets counted)."""
+	path = os.path.join(DATA, "comets.json")
+	if not os.path.exists(path):
+		from urllib.request import urlopen
+		with urlopen(COMETS_URL, timeout=120) as r:
+			body = r.read()
+		if b'"data"' not in body:
+			raise ValueError("SBDB returned no comets")
+		with open(path, "wb") as f:
+			f.write(body)
+	with open(path) as f:
+		rows = json.load(f)["data"]
+	inc = np.radians([float(i) for name, e, i, q, first in rows
+					  if name.strip().startswith("C/") and first and float(q) > 0.1 and float(e) < 1.5 and abs(int(first[:4]) - year) <= ERA])
+	share = np.histogram(np.arccos(np.abs(np.cos(inc))), planets.TILT_EDGES)[0] / len(inc)
+	return share / np.diff(1 - np.cos(planets.TILT_EDGES)), len(inc)
+
+
 def planets_at(jd):
 	"""Sun + planets at JD from Horizons, cached as a REBOUND binary."""
 	path = os.path.join(DATA, f"planets_{jd:.1f}.bin")
@@ -190,5 +213,8 @@ def score(tag, mapper=map):
 	R = planets.rotation(*(np.array([math.radians(el[k])]) for k in ("i", "om", "w")))
 	d, t = planets.passes(el["q"], v, R, np.array([el["tp"]]), orbits)
 	null = planets.Null(el["q"], v, orbits, mapper)
+	excess, n_comets = survey_excess(round(2000 + (el["tp"] - 2451545.0) / 365.25))
 	return {"name": el["name"], "short": el["short"], "v_inf_kms": v * AU_DAY_KMS, "q": el["q"], "tp": el["tp"],
-			"d": d[0], "jd": t[0], "p": null.p(d[0])[0], "bits": null.bits(d[0])}
+			"d": d[0], "jd": t[0], "p": null.p(d[0])[0], "bits": null.bits(d[0]),
+			"segments": null.segments(el["q"], v, orbits, R[0], d[0], excess, mapper), "excess": excess, "comets": n_comets,
+			"tilt": math.degrees(float(planets.tilt(R[0])))}

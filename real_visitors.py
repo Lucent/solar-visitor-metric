@@ -66,6 +66,9 @@ def main():
 		for name, radius, d, t, p in zip(planets.NAMES, planets.RADIUS_KM, r["d"], r["jd"], r["p"]):
 			print(f"  {name:<9}{d:>8.3f}AU{d * AU_KM / radius:>10,.0f}  {date(t):<11}{p:>8.3f}")
 		print(f"  planet score: {r['bits']:.2f} bits, against the same speed and perihelion in every orientation at any time")
+		s = r["segments"]
+		print(f"  where they come from ({s['total']:.2f} bits on their own sample): survey bias {s['bias']:.2f} (from {r['comets']} comets, "
+			  f"excess by tilt {np.round(r['excess'], 2).tolist()}), lying in the plane {s['plane']:.2f}, direction within it {s['direction']:.2f}, timing {s['timing']:.2f}")
 		ends = []
 		shown = {}
 		turn = math.degrees(math.acos(V_in @ V_out / (np.linalg.norm(V_in) * np.linalg.norm(V_out))))
@@ -95,7 +98,7 @@ def main():
 		site.append({
 			"tag": tag, "name": r["name"], "short": el["short"], "vinf": r["v_inf_kms"], "tp": el["tp"], "q": el["q"],
 			"path": real.path(tag, times),
-			"planets": {"bits": r["bits"], "passes": [{"name": name, "d": d, "radii": d * AU_KM / radius, "jd": t, "p": p}
+			"planets": {"bits": r["bits"], "segments": r["segments"], "comets": r["comets"], "tilt": r["tilt"], "passes": [{"name": name, "d": d, "radii": d * AU_KM / radius, "jd": t, "p": p}
 				for name, radius, d, t, p in zip(planets.NAMES, planets.RADIUS_KM, r["d"], r["jd"], r["p"])]},
 			"together": together(r["bits"], rb), "searches": SEARCHES.get(tag, []),
 			"route": {"bits": rb, "beaten": frac, "turn": turn, "planned": plan, **shown}})
