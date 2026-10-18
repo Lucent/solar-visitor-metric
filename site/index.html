@@ -646,6 +646,187 @@ h2:first-child {
 .found {
 	color: var(--heat);
 }
+/* A score opened into its parts: one bar the width of the panel, each part as long as its bits, named inside while it is wide enough and explained below beside its swatch. The explained part is gray and hatched; the coincidences are violet. */
+.split {
+	margin: 0.6rem 0;
+}
+.split summary {
+	color: var(--s1);
+	cursor: pointer;
+}
+:is(.split, .opened) .bias {
+	--fill: repeating-linear-gradient(135deg, color-mix(in oklab, var(--muted) 42%, var(--plane)) 0 3px, color-mix(in oklab, var(--muted) 28%, var(--plane)) 3px 6px);
+	--on: var(--ink);
+}
+:is(.split, .opened) .plane {
+	--fill: color-mix(in oklch, var(--heat) 45%, var(--plane));
+	--on: var(--ink);
+}
+:is(.split, .opened) .direction {
+	--fill: var(--ink2);
+}
+:is(.split, .opened) .timing {
+	--fill: var(--heat);
+}
+.split .bar {
+	display: flex;
+	gap: 2px;
+	block-size: 2.4rem;
+	margin: 0.5rem 0;
+}
+.split .bar span {
+	flex: 0 1 0;
+	min-inline-size: 3px;
+	container-type: inline-size;
+	display: flex;
+	align-items: center;
+	padding-inline: 0.5rem;
+	border-radius: 4px;
+	overflow: hidden;
+	background: var(--fill);
+	font-size: 0.8rem;
+	white-space: nowrap;
+	color: var(--on, var(--plane));
+}
+.split .bar em {
+	font-style: normal;
+}
+@container (width < 7rem) {
+	.split .bar em {
+		visibility: hidden;
+	}
+}
+.split ul {
+	display: grid;
+	gap: 0.35rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 0.9rem;
+	color: var(--ink2);
+}
+.split li::before {
+	content: "";
+	display: inline-block;
+	inline-size: 0.8em;
+	block-size: 0.8em;
+	margin-inline-end: 0.4em;
+	border-radius: 2px;
+	background: var(--fill);
+	vertical-align: -0.05em;
+}
+.split li b {
+	color: var(--ink);
+}
+/* The last visitor's planet bar, opened across all three tracks: a line from each end of the small bar runs down to the ends of the large one, and the large one is framed in the bar's own violet so it reads as the same thing, enlarged. */
+#verdict tr.opened :is(th, td) {
+	padding: 0;
+	background: none;
+}
+/* a table cell holds one line; this one holds sentences */
+#verdict tr.opened td {
+	grid-column: 2 / -1;
+	text-align: start;
+	white-space: normal;
+	color: var(--ink2);
+}
+/* The left ends already line up, so one straight line joins them. The right end of the small bar is --from along the cell, at its bits on the first of three tracks, which share the cell less two column gaps; from there a brace of two bordered halves drops, sweeps on a long elliptical turn into a straight run across at mid-height, and sweeps down again into the large bar's end. */
+.opened .funnel {
+	--from: calc((100% - 1rem) / 3 * min(var(--bits), 25) / 25);
+	--line: 2px solid var(--heat);
+	--turn: 5rem 80%;
+	position: relative;
+	block-size: 2.4rem;
+	border-inline-start: var(--line);
+}
+.opened .funnel::before, .opened .funnel::after {
+	content: "";
+	position: absolute;
+	box-sizing: border-box;
+	block-size: calc(50% + 1px);
+	border: var(--line);
+}
+.opened .funnel::before {
+	inset-block-start: 0;
+	inset-inline: var(--from) calc((100% - var(--from)) / 2);
+	border-block-start: 0;
+	border-inline-end: 0;
+	border-end-start-radius: var(--turn);
+}
+.opened .funnel::after {
+	inset-block-end: 0;
+	inset-inline: calc(var(--from) + (100% - var(--from)) / 2) 0;
+	border-block-end: 0;
+	border-inline-start: 0;
+	border-start-end-radius: var(--turn);
+}
+/* the large bar is framed in the small one's violet; its parts are Ptree's key cells, bits set sideways at the leading edge and words wrapping beside them, rounded only at the bar's outer ends */
+.opened .bar {
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border: 1px solid var(--heat);
+	border-radius: 7px;
+}
+.opened .bar span {
+	flex: 0 1 0;
+	min-inline-size: 3px;
+	display: flex;
+	gap: 0.55rem;
+	padding: 0.45rem 0.75rem 0.45rem 0.4rem;
+	background: var(--fill);
+	font-size: 0.85rem;
+	line-height: 1.3;
+	color: var(--on, var(--plane));
+}
+/* a part too narrow for words still carries its bits, sideways and centered */
+.opened .bar span:not(:has(em)) {
+	justify-content: center;
+	padding-inline: 0;
+}
+.opened .bar span:first-child {
+	border-start-start-radius: 5px;
+	border-end-start-radius: 5px;
+}
+.opened .bar span:last-child {
+	border-start-end-radius: 5px;
+	border-end-end-radius: 5px;
+}
+.opened .bar span > b {
+	flex: none;
+	writing-mode: sideways-lr;
+	text-align: center;
+	font-size: 0.75rem;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.opened .bar em {
+	flex: 1;
+	min-inline-size: 0;
+	align-self: center;
+	font-style: normal;
+}
+.opened .bar a {
+	color: inherit;
+}
+.opened p {
+	margin: 0.4rem 0 0;
+	font-size: 0.8rem;
+}
+.opened p::before {
+	content: "";
+	display: inline-block;
+	inline-size: 0.8em;
+	block-size: 0.8em;
+	margin-inline-end: 0.4em;
+	border-radius: 2px;
+	background: var(--fill);
+	vertical-align: -0.05em;
+}
+.opened p b {
+	color: var(--ink);
+}
 /* the ends of a route are named in their colors in the scene */
 h3:is(.origin, .destination) {
 	color: var(--tint);

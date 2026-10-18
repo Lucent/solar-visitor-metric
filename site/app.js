@@ -444,6 +444,7 @@ const simbad = (i) => `https://simbad.cds.unistra.fr/simbad/sim-id?Ident=${encod
 const wiki = (title) => `https://en.wikipedia.org/wiki/Special:Search?go=Go&search=${encodeURIComponent(title)}`;
 const star = (i) => `<a href="${data.stars.names[i] ? wiki(data.stars.names[i]) : simbad(i)}" title="${data.stars.ids[i]}">${named(i)}</a>`;
 const term = (title, text) => `<a href="https://en.wikipedia.org/wiki/${title}">${text}</a>`;
+const listed = (names) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 const best = (v) => Math.max(v.planets.bits, v.route.bits);
 
 // A chance in words, colored as its badge is: ink for chance, violet as the bits climb.
@@ -465,6 +466,37 @@ function closest(v) {
 	return `Closest to planned: its ${kind}, ${fmt(b)} bits. ${odds(b)} random arrivals do as well.`;
 }
 
+// Where a planet score's bits come from: steps that each narrow the null, so their bits add to the whole. A part under a tenth of a bit either way says nothing and is left out; the bar draws the parts that add.
+function parts(v) {
+	const s = v.planets.segments;
+	const nearest = listed(v.planets.passes.toSorted((a, b) => a.p - b.p).slice(0, 3).map((p) => p.name));
+	// each part finishes the phrase its bits begin, in one form: "4.7 bits from" a subject doing something
+	return [
+		["bias", s.bias, "from sky surveys favoring objects near the planets' plane."],
+		["plane", s.plane, `from its path lying within ${Math.ceil(v.planets.tilt)}° of the ${term("Ecliptic", "planets' plane")}.`],
+		["direction", s.direction, "from its path pointing as it does within that plane."],
+		["timing", s.timing, `from its arriving while ${nearest} were near its path.`],
+	].filter(([, b]) => Math.abs(b) >= 0.1);
+}
+
+function split(v) {
+	const p = parts(v);
+	return `<details class="split"><summary>Where the ${fmt(v.planets.segments.total)} bits come from</summary>
+<div class="bar">${p.filter(([, b]) => b > 0).map(([kind, b]) => `<span class="${kind}" style="flex-grow: ${b}"><em><b>${fmt(b)}</b> bits</em></span>`).join("")}</div>
+<ul>${p.map(([kind, b, text]) => `<li class="${kind}"><b>${fmt(b)} bits</b> ${text}</li>`).join("")}</ul>
+</details>`;
+}
+
+// The last visitor's planet score opened under its row: the same bar at the width of all three tracks, joined to the small one by lines from its ends, each part explained inside itself. A part too narrow to hold its words keeps them beneath the bar.
+function opened(v) {
+	const p = parts(v).filter(([, b]) => b > 0);
+	const total = p.reduce((sum, [, b]) => sum + b, 0);
+	const roomy = (b) => b / total >= 0.2;
+	return `<tr class="opened"><th></th><td style="--bits: ${v.planets.bits}"><div class="funnel"></div>
+<div class="bar">${p.map(([kind, b, text]) => `<span class="${kind}" style="flex-grow: ${b}">${roomy(b) ? `<b>${fmt(b)} bits</b><em>${text}</em>` : `<b>${fmt(b)} bits</b>`}</span>`).join("")}</div>
+${p.filter(([, b]) => !roomy(b)).map(([kind, b, text]) => `<p class="${kind}"><b>${fmt(b)} bits</b> ${text}</p>`).join("")}</td></tr>`;
+}
+
 function panel(v) {
 	const plan = v.route.planned;
 	return `<input type="radio" name="visitor" form="controls" id="v${v.tag}" value="${v.tag}"><label for="v${v.tag}" class="visitor"><b>${v.tag}</b>${v.short}${bits(best(v))}</label>
@@ -475,6 +507,7 @@ function panel(v) {
 <h2><span>Planets${method("Planets. A visitor")}</span>${bits(v.planets.bits)}</h2>
 <p class="lead">${odds(v.planets.bits)} random arrivals pass the planets as closely.</p>
 <p>Random arrivals keep its speed and perihelion but take any direction and any time. So lying in the ${term("Ecliptic", "ecliptic")} counts, and so does meeting several planets. The score is the chance of its three closest passes together.</p>
+${split(v)}
 <h3>Planet passes</h3>
 <table class="planets">
 <thead><tr><th></th><th>closest</th><th>planet radii</th><th>date</th><th>chance</th></tr></thead>
@@ -500,7 +533,6 @@ document.querySelector("aside").innerHTML = data.visitors.map(panel).join("\n");
 const cell = (b, badge) => `<td style="--bits: ${b}">${badge ? bits(b) : `${fmt(b)} bits`}<small>${chance(2 ** -b)}</small></td>`;
 const cells = (r, badge) => cell(r.planets, badge) + cell(r.route, badge) + cell(r.together, badge);
 const m = data.missions;
-const listed = (names) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 const passed = (passes) => listed(Object.entries(passes).map(([name, d]) => `${name} at ${fmt(d)} AU`));
 // A mission says what it did in a few words; its distances wait on hover.
 const mission = {
@@ -510,7 +542,7 @@ const mission = {
 };
 const by = visitors[data.visitors.find((v) => Math.abs(v.vinf - m.speed) < 1).tag];
 id("verdict").innerHTML = `<thead><tr><th></th><th>Planets</th><th>Route</th><th title="planets and route scored as one test">Together</th></tr></thead>
-<tbody class="visitor">${data.visitors.map((v) => `<tr><th><label for="v${v.tag}">${v.tag} ${v.short}</label></th>${cells({ planets: v.planets.bits, route: v.route.bits, together: v.together }, true)}</tr>`).join("")}</tbody>
+<tbody class="visitor">${data.visitors.map((v) => `<tr><th><label for="v${v.tag}">${v.tag} ${v.short}</label></th>${cells({ planets: v.planets.bits, route: v.route.bits, together: v.together }, true)}</tr>`).join("")}${opened(data.visitors.at(-1))}</tbody>
 <tbody class="planned"><tr><th colspan="4">Simulated missions at ${by.short}'s speed, ${fmt(m.speed)} km/s</th></tr>
 ${m.rows.map((r) => { const [name, detail] = mission[r.kind](r); return `<tr><th title="${detail}">${name}</th>${cells(r)}</tr>`; }).join("")}</tbody>
 <tfoot><tr><td></td>${`<td>${[[1, "coin flip"], [10, "1 in 1,000"], [19.3, "royal flush"]].map(([at, text]) => `<span style="--at: ${at}">${text}</span>`).join("")}</td>`.repeat(3)}</tr></tfoot>`;
